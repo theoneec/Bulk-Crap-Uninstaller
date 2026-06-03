@@ -1,0 +1,95 @@
+# Fork changes
+
+This is a **personal fork** of [Bulk Crap Uninstaller](https://github.com/Klocman/Bulk-Crap-Uninstaller)
+by Marcin Szeniak (Apache License 2.0). This file is the single, maintained
+record of how this fork diverges from upstream — keep it current whenever you
+change something that upstream doesn't have.
+
+- **Upstream:** `Klocman/Bulk-Crap-Uninstaller` (remote `upstream`)
+- **Fork origin:** `luadmin/Bulk-Crap-Uninstaller` (Forgejo), default branch `master`
+- **Forked from:** upstream `master` at `4ecea11b` (3 commits past tag `v6.1`)
+
+---
+
+## Summary of divergences
+
+### 1. Headless / single-file engine patches  (`source/UninstallTools`)
+The `UninstallTools` engine couldn't run in a self-contained single-file /
+headless build. Three changes fix that:
+
+| File | Change |
+|------|--------|
+| `Factory/InfoAdders/FastSizeGenerator.cs` | Replaced the `Scripting.FileSystemObjectClass` COM dependency (fails under single-file/headless) with a managed directory walk. |
+| `UninstallToolsGlobalConfig.cs` | Falls back to `AppContext.BaseDirectory` when `Assembly.Location` is empty (as under single-file publish) so bundled helper EXEs are still found. |
+| `UninstallTools.csproj` | Removed the `Scripting` COMReference (breaks single-file publish). |
+
+> Previously tracked in the `bcu-cli` repo as `bcu-engine-headless-patches.patch`;
+> now committed directly here.
+
+### 2. Complete command-line front-end  (`source/BCU-console`)
+Upstream `BCU-console` was a 3-command stub (`list` / `export` / `uninstall`),
+could only uninstall from a pre-built `.bcul` list, and blocked on
+`Console.ReadKey()` — it hung even when asked to show help. It has been replaced
+with the full `bcu-cli` engine CLI.
+
+- **New/added files** (merged from `bcu-cli`, namespace `BcuCli`):
+  `Engine.cs`, `Output.cs`, `BulkUninstall.cs`, `EntryActions.cs`,
+  `StartupCommands.cs`, `Exporters.cs`, `AppRecord.cs`, `CliArgs.cs`.
+- **Rewritten:** `Program.cs` — full command dispatcher (top-level statements),
+  replacing the upstream stub.
+- **Capabilities added:** by-name uninstall, bulk uninstall, repair/modify/
+  rename/delete-entry, startup management, info dump, junk scan/clean,
+  multi-format export (json/csv/xml/bat/ps1), list import, certificate
+  verification, RMM-safe source defaults, dry-run-by-default safety model,
+  fully non-blocking I/O.
+- **Back-compat preserved:** `uninstall <list.bcul>` still works, and the legacy
+  `/Q /U /V /J[=Level]` switches are mapped onto the new model.
+- **Build/output changes** (`BCU-console.csproj`): `AssemblyName=bcu` (outputs
+  **`bcu.exe`**), a post-build **`BCU-console.exe`** alias for back-compat,
+  top-level-statement entry point (removed `<StartupObject>`), and
+  `ImplicitUsings` + `Nullable` enabled.
+- **Docs:** `source/BCU-console/README.md` — full user + dev reference (new file).
+
+### 3. Licensing / attribution
+- Apache-2.0 change notices added to all modified upstream files (§4b), original
+  copyright retained.
+- Apache-2.0 headers added to the new `BCU-console` source files (`theoneec`).
+- `Licence.txt` and `NOTICE` retained unmodified.
+
+---
+
+## Known TODOs / not-yet-done
+
+- **Steam/Store/Oculus helpers** are not produced by a `BCU-console`-only build;
+  build the full solution (`source/BulkCrapUninstaller.sln`) to co-locate them,
+  or use `--rmm-safe` / `--no-steam --no-store`.
+- **Self-contained single-file `bcu.exe`** publish is not wired into
+  `BCU-console.csproj` (the old standalone `bcu-cli` did this by copying helpers
+  with `ExcludeFromSingleFile=true`). Porting it is outstanding.
+
+---
+
+## Pulling upstream updates
+
+```bash
+git fetch upstream
+git merge upstream/master        # or: git rebase upstream/master
+# Resolve conflicts (most likely in the 3 patched UninstallTools files
+# and source/BCU-console/*), then update this file if the divergence changed.
+```
+
+---
+
+## Changelog (fork commits, newest first)
+
+| Commit | Description |
+|--------|-------------|
+| `cbd495ce` | License compliance: Apache-2.0 headers and change notices |
+| `1aa6b90f` | Document the merged BCU-console CLI |
+| `87ae2971` | Merge bcu-cli into BCU-console: complete the command-line front-end |
+| `41d03829` | Apply headless/single-file engine patches to UninstallTools |
+| `4ecea11b` | *(upstream base — last commit shared with Klocman/master)* |
+
+> When you add a fork-specific change: update the relevant section above and add
+> a row here. Keep `4ecea11b` as the marker for the upstream fork point until you
+> re-sync with upstream.
