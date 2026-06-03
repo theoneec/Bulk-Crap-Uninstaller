@@ -94,6 +94,7 @@ git merge upstream/master        # or: git rebase upstream/master
 
 | Commit | Description |
 |--------|-------------|
+| `98346135` | Wire engine helper EXEs into the BCU-console build |
 | `cbd495ce` | License compliance: Apache-2.0 headers and change notices |
 | `1aa6b90f` | Document the merged BCU-console CLI |
 | `87ae2971` | Merge bcu-cli into BCU-console: complete the command-line front-end |
