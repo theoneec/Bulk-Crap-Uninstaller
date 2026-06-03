@@ -165,11 +165,15 @@ slow and unreliable in headless RMM contexts.
 | `--oculus` | Enable Oculus scanning |
 | `--no-registry` / `--no-drives` / `--no-steam` / `--no-store` / `--no-choco` / `--no-scoop` / `--no-features` / `--no-updates` | Skip a specific source |
 
-> **Steam & Windows Store scanning need helper EXEs.** `SteamHelper.exe` and
-> `StoreAppHelper.exe` must sit next to `bcu.exe`. A project-only build does
-> **not** produce them — build the full solution (see
-> [Building from source](#building-from-source)) or pass `--rmm-safe` /
-> `--no-steam --no-store` to avoid silently empty results.
+> **Source helpers ship with the build.** The engine invokes helper EXEs by path
+> from the app folder (each `File.Exists`-guarded). `BCU-console.csproj`
+> references them so they build next to `bcu.exe` automatically:
+> `SteamHelper.exe`, `StoreAppHelper.exe`, `OculusHelper.exe`, `ScriptHelper.exe`,
+> and `UninstallerAutomatizer.exe` (the quiet/automated-uninstall engine).
+> **`WinUpdateHelper.exe` is the exception** — it has a COM reference and only
+> builds under Framework MSBuild (see [Building from source](#building-from-source)),
+> so under `dotnet build` Windows Update scanning is unavailable and degrades
+> gracefully. Any missing helper just means that one source returns nothing.
 
 ---
 
@@ -279,23 +283,30 @@ bcu help
   it fine via the pinned TFM).
 - Windows (uses WinForms-hosted helper tooling).
 
-**Build the CLI only** (fast; registry/choco/scoop/features sources work, but
-Steam/Store/Oculus do **not** — their helpers aren't produced):
+**Build with `dotnet` (CI-friendly; everything except Windows Update):**
 
 ```powershell
 # from the repository root
 dotnet build source/BCU-console/BCU-console.csproj -c Release
 ```
 
-Output: `bin\Release\bcu.exe` and `bin\Release\BCU-console.exe` (alias),
-alongside `UninstallTools.dll` / `KlocTools.dll`.
+Output: `bin\Release\bcu.exe` + `bin\Release\BCU-console.exe` (alias), with
+`SteamHelper.exe`, `StoreAppHelper.exe`, `OculusHelper.exe`, `ScriptHelper.exe`
+and `UninstallerAutomatizer.exe` co-located via project references. `dotnet`
+uses Core MSBuild, which **cannot** resolve `WinUpdateHelper`'s COM reference
+(`MSB4803`), so that helper is conditionally excluded — Windows Update scanning
+is unavailable in this build.
 
-**Build everything** (recommended — co-locates `SteamHelper.exe`,
-`StoreAppHelper.exe`, `OculusHelper.exe`, etc. so all sources work):
+**Build with Framework MSBuild (full — includes Windows Update):**
 
 ```powershell
-dotnet build source/BulkCrapUninstaller.sln -c Release
+& "C:\Program Files\Microsoft Visual Studio\2022\<Edition>\MSBuild\Current\Bin\MSBuild.exe" `
+    source/BCU-console/BCU-console.csproj /t:Build /p:Configuration=Release
 ```
+
+Framework MSBuild resolves the `WUApiLib` COM reference, so all six helpers —
+including `WinUpdateHelper.exe` — are produced. This is the same toolchain
+upstream's `publish.bat` uses.
 
 > The headless/single-file engine patches required for this CLI are already baked
 > into `source/UninstallTools` on this fork (they were previously tracked in

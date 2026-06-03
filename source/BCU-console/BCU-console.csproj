@@ -24,6 +24,33 @@
 		<ProjectReference Include="..\UninstallTools\UninstallTools.csproj" />
 	</ItemGroup>
 
+	<!-- Engine helper executables. The UninstallTools engine invokes these by path
+	     from the app's base directory (File.Exists-guarded), so they must sit next to
+	     bcu.exe for the corresponding features to work:
+	       SteamHelper          - Steam game detection + uninstall
+	       StoreAppHelper       - Windows Store / UWP apps
+	       WinUpdateHelper      - Windows Update entries
+	       OculusHelper         - Oculus apps
+	       ScriptHelper         - script-based (choco/scoop/etc.) detection
+	       UninstallerAutomatizer - quiet/automated uninstall + the bulk quiet-uninstall
+	                                daemon and NSIS silent-uninstall workaround (cleanup)
+	     They share the solution OutputPath, so building them places the EXEs in the
+	     same folder as bcu.exe. ReferenceOutputAssembly=false: build them as a
+	     dependency, don't link their assemblies. -->
+	<ItemGroup>
+		<ProjectReference Include="..\SteamHelper\SteamHelper.csproj" ReferenceOutputAssembly="false" Private="false" />
+		<ProjectReference Include="..\StoreAppHelper\StoreAppHelper.csproj" ReferenceOutputAssembly="false" Private="false" />
+		<!-- WinUpdateHelper has a COMReference (WUApiLib) that only Framework MSBuild can
+		     resolve (ResolveComReference). 'dotnet build' uses Core MSBuild and would fail
+		     (MSB4803), so include it only under Framework MSBuild (msbuild.exe / VS). Under
+		     'dotnet build' it's skipped and Windows Update scanning degrades gracefully. -->
+		<ProjectReference Include="..\WinUpdateHelper\WinUpdateHelper.csproj" ReferenceOutputAssembly="false" Private="false"
+		                  Condition="'$(MSBuildRuntimeType)' != 'Core'" />
+		<ProjectReference Include="..\OculusHelper\OculusHelper.csproj" ReferenceOutputAssembly="false" Private="false" />
+		<ProjectReference Include="..\ScriptHelper\ScriptHelper.csproj" ReferenceOutputAssembly="false" Private="false" />
+		<ProjectReference Include="..\UninstallerAutomatizer\UninstallerAutomatizer.csproj" ReferenceOutputAssembly="false" Private="false" />
+	</ItemGroup>
+
 	<!-- Back-compat alias: ship BCU-console.exe alongside the new bcu.exe so existing
 	     scripts that call BCU-console.exe keep working. -->
 	<Target Name="CreateBcuConsoleAlias" AfterTargets="Build" Condition="Exists('$(TargetDir)bcu.exe')">

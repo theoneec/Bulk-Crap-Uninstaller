@@ -48,6 +48,15 @@ with the full `bcu-cli` engine CLI.
   **`bcu.exe`**), a post-build **`BCU-console.exe`** alias for back-compat,
   top-level-statement entry point (removed `<StartupObject>`), and
   `ImplicitUsings` + `Nullable` enabled.
+- **Helper wiring** (`BCU-console.csproj`): added `ProjectReference`s
+  (`ReferenceOutputAssembly=false`) to the engine helper EXEs so they build next
+  to `bcu.exe` when the project is built on its own — `SteamHelper`,
+  `StoreAppHelper`, `OculusHelper`, `ScriptHelper`, `UninstallerAutomatizer`
+  (quiet/automated-uninstall + bulk quiet daemon), and `WinUpdateHelper`.
+  `WinUpdateHelper` is gated to Framework MSBuild via
+  `Condition="'$(MSBuildRuntimeType)' != 'Core'"` because its `WUApiLib` COM
+  reference can't be resolved by `dotnet build` (MSB4803). Upstream relied on a
+  full-solution build to co-locate these; this makes the CLI self-sufficient.
 - **Docs:** `source/BCU-console/README.md` — full user + dev reference (new file).
 
 ### 3. Licensing / attribution
@@ -60,9 +69,10 @@ with the full `bcu-cli` engine CLI.
 
 ## Known TODOs / not-yet-done
 
-- **Steam/Store/Oculus helpers** are not produced by a `BCU-console`-only build;
-  build the full solution (`source/BulkCrapUninstaller.sln`) to co-locate them,
-  or use `--rmm-safe` / `--no-steam --no-store`.
+- **Windows Update scanning under `dotnet build`** — `WinUpdateHelper` is
+  excluded from `dotnet`/Core MSBuild builds (COM reference, MSB4803). Build with
+  Framework MSBuild (`msbuild.exe`, as `publish.bat` does) to include it.
+  The other five helpers build under both toolchains.
 - **Self-contained single-file `bcu.exe`** publish is not wired into
   `BCU-console.csproj` (the old standalone `bcu-cli` did this by copying helpers
   with `ExcludeFromSingleFile=true`). Porting it is outstanding.
