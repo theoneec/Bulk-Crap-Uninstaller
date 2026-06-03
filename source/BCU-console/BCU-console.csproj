@@ -1,16 +1,26 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
 		<OutputType>Exe</OutputType>
 		<RootNamespace>BCU_console</RootNamespace>
+		<AssemblyName>bcu</AssemblyName>
 
 		<Product>Command Line Interface for Bulk Crap Uninstaller</Product>
-		<AssemblyTitle>Command line utility that offers some of BCU's functionality for scripting</AssemblyTitle>
-		
+		<AssemblyTitle>Command line utility that offers BCU's functionality for scripting and RMM</AssemblyTitle>
+
 		<ApplicationIcon>..\BulkCrapUninstaller\Resources\logo.ico</ApplicationIcon>
-		<StartupObject>BCU_console.Program</StartupObject>
+
+		<!-- Merged bcu-cli sources rely on these; entry point is Program.cs top-level statements. -->
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<ProjectReference Include="..\UninstallTools\UninstallTools.csproj" />
 	</ItemGroup>
+
+	<!-- Back-compat alias: ship BCU-console.exe alongside the new bcu.exe so existing
+	     scripts that call BCU-console.exe keep working. -->
+	<Target Name="CreateBcuConsoleAlias" AfterTargets="Build" Condition="Exists('$(TargetDir)bcu.exe')">
+		<Copy SourceFiles="$(TargetDir)bcu.exe" DestinationFiles="$(TargetDir)BCU-console.exe" SkipUnchangedFiles="true" />
+	</Target>
 </Project>
