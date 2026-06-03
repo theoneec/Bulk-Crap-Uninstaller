@@ -1,6 +1,10 @@
 /*
     Copyright (c) 2017 Marcin Szeniak (https://github.com/Klocman/)
     Apache License Version 2.0
+
+    Modified 2026 (BCU personal fork, theoneec): replaced the
+    Scripting.FileSystemObjectClass COM dependency with a managed directory walk
+    so directory-size calculation works under single-file/headless publish.
 */
 
 using System;

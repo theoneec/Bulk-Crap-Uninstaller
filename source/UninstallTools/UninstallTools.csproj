@@ -1,4 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+﻿<!--
+	Copyright (c) Marcin Szeniak (https://github.com/Klocman/) — Apache License Version 2.0
+	Modified 2026 (BCU personal fork, theoneec): removed the Scripting COMReference,
+	which breaks single-file publish (see FastSizeGenerator.cs change).
+-->
+<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
 		<OutputType>Library</OutputType>
 

@@ -1,4 +1,13 @@
-﻿using System;
+﻿/*
+    Copyright (c) Marcin Szeniak (https://github.com/Klocman/)
+    Apache License Version 2.0
+
+    Modified 2026 (BCU personal fork, theoneec): fall back to
+    AppContext.BaseDirectory when Assembly.Location is empty (as under
+    single-file publish) so bundled helper EXEs are still located.
+*/
+
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;

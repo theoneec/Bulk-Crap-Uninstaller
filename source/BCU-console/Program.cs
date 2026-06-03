@@ -1,4 +1,13 @@
 /*
+    Copyright (c) 2017 Marcin Szeniak (https://github.com/Klocman/)  — original BCU-console
+    Copyright (c) 2026 theoneec                                      — merged CLI rewrite
+    Apache License Version 2.0
+
+    Modified 2026 (BCU personal fork): the original 3-command BCU-console
+    Program.cs was replaced with the full bcu-cli command dispatcher.
+*/
+
+/*
  * BCU-console — Bulk Crap Uninstaller, command-line interface.
  *
  * Full UninstallTools-engine CLI (merged from bcu-cli) so the command line has

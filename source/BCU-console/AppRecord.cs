@@ -1,3 +1,11 @@
+/*
+    Copyright (c) 2026 theoneec
+    Apache License Version 2.0
+
+    Part of a personal fork of Bulk Crap Uninstaller
+    (Marcin Szeniak, https://github.com/Klocman/). Original file authored for
+    the merged BCU-console command-line interface.
+*/
 using System.Text.Json.Serialization;
 using UninstallTools;
 
