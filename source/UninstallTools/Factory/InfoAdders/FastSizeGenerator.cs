@@ -10,35 +10,24 @@ using System.Text;
 using System.Threading.Tasks;
 using Klocman.Extensions;
 using Klocman.IO;
-using Scripting;
 using File = System.IO.File;
 
 namespace UninstallTools.Factory.InfoAdders
 {
     public class FastSizeGenerator : IMissingInfoAdder
     {
-        private static readonly FileSystemObjectClass _fileSystemObject;
         private static bool _everythingAvailable;
 
         static FastSizeGenerator()
         {
             try
             {
-                _fileSystemObject = new FileSystemObjectClass();
-            }
-            catch (Exception ex)
-            {
-                Trace.WriteLine(@"FastSizeGenerator: Scripting.FileSystemObjectClass is not available - " + ex.Message);
-            }
-
-            try
-            {
                 if (EvGetSize(UninstallToolsGlobalConfig.AssemblyLocation).GetKbSize() == 0)
-                    throw new SystemException("Test failed to get valid BCU directory size");
+                    throw new InvalidOperationException("Test failed to get valid BCU directory size");
 
                 _everythingAvailable = true;
             }
-            catch (SystemException ex)
+            catch (Exception ex)
             {
                 _everythingAvailable = false;
                 Trace.WriteLine(@"FastSizeGenerator: Everything search engine is not available - " + ex.Message);
@@ -64,19 +53,32 @@ namespace UninstallTools.Factory.InfoAdders
                 }
             }
 
-            if (_fileSystemObject != null)
+            // Fallback: managed directory size calculation
+            try
             {
-                try
+                long totalBytes = GetDirectorySizeManaged(target.InstallLocation);
+                if (totalBytes > 0)
+                    target.EstimatedSize = FileSize.FromKilobytes(totalBytes / 1024);
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine(ex);
+            }
+        }
+
+        private static long GetDirectorySizeManaged(string path)
+        {
+            long size = 0;
+            try
+            {
+                foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
                 {
-                    var folder = _fileSystemObject.GetFolder(target.InstallLocation);
-                    var size = new FileSize(Convert.ToInt64(folder.Size) / 1024);
-                    target.EstimatedSize = size;
-                }
-                catch (Exception ex)
-                {
-                    Trace.WriteLine(ex);
+                    try { size += new FileInfo(file).Length; }
+                    catch { /* skip locked/inaccessible files */ }
                 }
             }
+            catch { /* skip inaccessible directories */ }
+            return size;
         }
 
         private static FileSize EvGetSize(string path)
@@ -117,14 +119,8 @@ namespace UninstallTools.Factory.InfoAdders
 
                 if (!readOutputTask.IsCompleted)
                 {
-                    try
-                    {
-                        process.Kill();
-                    }
-                    catch
-                    {
-                        // Ignore exceptions from killing the process
-                    }
+                    try { process.Kill(); }
+                    catch { }
                     throw new TimeoutException("es.exe appears to have hung");
                 }
 

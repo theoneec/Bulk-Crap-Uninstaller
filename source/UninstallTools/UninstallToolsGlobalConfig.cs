@@ -17,6 +17,9 @@ namespace UninstallTools
         static UninstallToolsGlobalConfig()
         {
             AssemblyLocation = Assembly.GetExecutingAssembly().Location;
+            // In single-file publish, Location returns ""; fall back to the app's base directory
+            if (string.IsNullOrEmpty(AssemblyLocation))
+                AssemblyLocation = AppContext.BaseDirectory;
             if (AssemblyLocation.ContainsAny(new[] { ".dll", ".exe" }, StringComparison.OrdinalIgnoreCase))
                 AssemblyLocation = PathTools.GetDirectory(AssemblyLocation);
 
