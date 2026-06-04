@@ -63,7 +63,18 @@ with the full `bcu-cli` engine CLI.
 - Apache-2.0 change notices added to all modified upstream files (§4b), original
   copyright retained.
 - Apache-2.0 headers added to the new `BCU-console` source files (`theoneec`).
-- `Licence.txt` and `NOTICE` retained unmodified.
+- `Licence.txt` and `NOTICE` retained unmodified, and bundled into every release
+  zip (§4a/§4d for binary redistribution).
+
+### 4. Releases
+Published to the Forgejo repo under tag `v6.1.0-cli.1`. Two win-x64 zips, each
+also containing `BCU-console.exe`, `Licence.txt`, `NOTICE`, `README.md`:
+- **self-contained** — `dotnet publish` of bcu + 5 helpers into one folder
+  (shared runtime dedups); no .NET runtime needed on target; no `WinUpdateHelper`.
+- **framework-dependent** — Framework-MSBuild `Publish` of all 7 projects; all
+  six helpers incl. `WinUpdateHelper`; needs the .NET 8 Desktop Runtime.
+
+Build commands are in this file's history; consider scripting them (see TODOs).
 
 ---
 
@@ -73,9 +84,13 @@ with the full `bcu-cli` engine CLI.
   excluded from `dotnet`/Core MSBuild builds (COM reference, MSB4803). Build with
   Framework MSBuild (`msbuild.exe`, as `publish.bat` does) to include it.
   The other five helpers build under both toolchains.
-- **Self-contained single-file `bcu.exe`** publish is not wired into
-  `BCU-console.csproj` (the old standalone `bcu-cli` did this by copying helpers
-  with `ExcludeFromSingleFile=true`). Porting it is outstanding.
+- **Reproducible packaging script** — the v6.1.0-cli.1 zips were produced with
+  ad-hoc publish commands. A committed `build-release.ps1` (publish both flavours,
+  stage license/docs/alias, zip) would make releases repeatable.
+- **Self-contained _single-file_ `bcu.exe`** is still not wired up. The shipped
+  self-contained package is a folder (bcu.exe + helpers + runtime), not a single
+  bundled exe. The old standalone `bcu-cli` produced a single file via
+  `ExcludeFromSingleFile=true` for the helpers; porting that is outstanding.
 
 ---
 
@@ -94,6 +109,7 @@ git merge upstream/master        # or: git rebase upstream/master
 
 | Commit | Description |
 |--------|-------------|
+| `v6.1.0-cli.1` | **Release** — self-contained + framework-dependent win-x64 zips on Forgejo |
 | `98346135` | Wire engine helper EXEs into the BCU-console build |
 | `cbd495ce` | License compliance: Apache-2.0 headers and change notices |
 | `1aa6b90f` | Document the merged BCU-console CLI |
