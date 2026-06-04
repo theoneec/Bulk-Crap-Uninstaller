@@ -67,14 +67,20 @@ with the full `bcu-cli` engine CLI.
   zip (§4a/§4d for binary redistribution).
 
 ### 4. Releases
-Published to the Forgejo repo under tag `v6.1.0-cli.1`. Two win-x64 zips, each
-also containing `BCU-console.exe`, `Licence.txt`, `NOTICE`, `README.md`:
-- **self-contained** — `dotnet publish` of bcu + 5 helpers into one folder
-  (shared runtime dedups); no .NET runtime needed on target; no `WinUpdateHelper`.
-- **framework-dependent** — Framework-MSBuild `Publish` of all 7 projects; all
-  six helpers incl. `WinUpdateHelper`; needs the .NET 8 Desktop Runtime.
+Published to the Forgejo repo under tag `v6.1.0-cli.1` as a single **portable**
+asset — download, unzip, run; no installer and no .NET runtime required:
 
-Build commands are in this file's history; consider scripting them (see TODOs).
+- `BulkCrapUninstaller-v6.1.0-cli.1-win-x64-portable.zip` (~80 MB) — a
+  **self-contained win-x64** bundle of the whole app: GUI (`BCUninstaller.exe`)
+  + CLI (`bcu.exe` / `BCU-console.exe`) + all six engine helpers (incl.
+  `WinUpdateHelper`) + the bundled runtime, plus `Licence.txt`, `NOTICE`,
+  `PrivacyPolicy.txt`, `README.md`, `READ-ME-FIRST.txt`.
+
+Built by Framework-MSBuild `/t:Publish /p:SelfContained=True /p:RuntimeIdentifier=win-x64`
+of the .NET projects (GUI + BCU-console + 6 helpers) into one folder — mirrors
+`publish.bat` but **without the native `BCU-launcher` (C++/v143)**, which isn't
+installed here and isn't needed for a single-arch portable zip (run the exes
+directly). Build commands are in this file's history.
 
 ---
 
@@ -84,9 +90,14 @@ Build commands are in this file's history; consider scripting them (see TODOs).
   excluded from `dotnet`/Core MSBuild builds (COM reference, MSB4803). Build with
   Framework MSBuild (`msbuild.exe`, as `publish.bat` does) to include it.
   The other five helpers build under both toolchains.
-- **Reproducible packaging script** — the v6.1.0-cli.1 zips were produced with
-  ad-hoc publish commands. A committed `build-release.ps1` (publish both flavours,
-  stage license/docs/alias, zip) would make releases repeatable.
+- **Reproducible packaging script** — the v6.1.0-cli.1 portable zip was produced
+  with ad-hoc publish commands. A committed `build-release.ps1` (self-contained
+  publish of the .NET projects, stage license/docs/alias/read-me, zip) would make
+  releases repeatable.
+- **Native launcher / multi-arch** — `BCU-launcher` (C++) is skipped (no v143
+  toolset here). To ship the upstream-style multi-arch portable (one
+  `BCUninstaller.exe` launcher + `win-x64`/`win-arm64` subfolders), install the
+  VS C++ workload and run the full `publish.bat` flow.
 - **Self-contained _single-file_ `bcu.exe`** is still not wired up. The shipped
   self-contained package is a folder (bcu.exe + helpers + runtime), not a single
   bundled exe. The old standalone `bcu-cli` produced a single file via
@@ -109,7 +120,7 @@ git merge upstream/master        # or: git rebase upstream/master
 
 | Commit | Description |
 |--------|-------------|
-| `v6.1.0-cli.1` | **Release** — self-contained + framework-dependent win-x64 zips on Forgejo |
+| `v6.1.0-cli.1` | **Release** — portable self-contained win-x64 bundle (GUI + CLI + 6 helpers) on Forgejo |
 | `98346135` | Wire engine helper EXEs into the BCU-console build |
 | `cbd495ce` | License compliance: Apache-2.0 headers and change notices |
 | `1aa6b90f` | Document the merged BCU-console CLI |
