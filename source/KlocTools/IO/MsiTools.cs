@@ -201,7 +201,7 @@ namespace Klocman.IO
         {
             lock (GuidRegistryFormatPattern)
             {
-                if (_componentLookup != null) return;
+                if (_reverseComponentLookup != null) return;
 
                 var sw = Stopwatch.StartNew();
 
