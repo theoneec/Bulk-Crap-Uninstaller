@@ -81,6 +81,8 @@ namespace Klocman.IO
             {
                 var ret = (ResultWin32)MsiWrapper.MsiEnumComponents(i, lpComponentBuf);
                 if (ret == ResultWin32.ERROR_NO_MORE_ITEMS) break;
+                // Some MSI products return ERROR_BAD_CONFIGURATION for whatever reason, safest to skip them
+                if (ret == ResultWin32.ERROR_BAD_CONFIGURATION) continue;
                 if (ret != 0) throw ret.ToException();
                 yield return lpComponentBuf.ToString();
             }
@@ -111,7 +113,7 @@ namespace Klocman.IO
         {
             if (ComponentPathLookup.TryGetValue(component, out var value))
                 return value;
-            
+
             InitLookups();
 
             _reverseComponentLookup.TryGetValue(component, out var product);
@@ -162,7 +164,7 @@ namespace Klocman.IO
 #if RELEASE
                             _ => hiveId.ToString()
 #else
-                                _ => throw new ArgumentOutOfRangeException(nameof(hiveId), hiveId, @"Invalid hive")
+                            _ => throw new ArgumentOutOfRangeException(nameof(hiveId), hiveId, @"Invalid hive")
 #endif
                         };
                         path = hiveName + path[3..];
