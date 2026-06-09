@@ -164,8 +164,14 @@ public static class TuiCommand
                     status = DoUninstall(view, cursor, dryRun, args);
                     if (!dryRun)
                     {
+                        // Show the scan banner before the (slow) rescan, otherwise the
+                        // post-uninstall summary stays on screen and looks frozen.
+                        Console.ResetColor();
+                        Console.Clear();
+                        Console.WriteLine("Rescanning installed applications...");
                         all = LoadRows(args, SortModes[sortMode]);   // refresh after real uninstall
                         cursor = 0; top = 0;
+                        status = "Rescanned after uninstall.";
                     }
                     break;
 
