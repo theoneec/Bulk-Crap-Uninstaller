@@ -73,7 +73,7 @@ try
 catch (Exception ex)
 {
     Output.WriteError("BCU-console failed", ex, cliArgs.JsonErrors);
-    return 1;
+    return ExitCodes.Error;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -100,7 +100,7 @@ static int RunList(CliArgs args)
 
     if (!args.Quiet)
         Console.Error.WriteLine($"\nTotal: {apps.Count} application(s)");
-    return 0;
+    return ExitCodes.Success;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -114,7 +114,7 @@ static int RunExport(CliArgs args)
 
     // xml / bat / ps1 are handled by the dedicated exporter.
     if (Exporters.TryExport(apps, args))
-        return 0;
+        return ExitCodes.Success;
 
     TextWriter output = !string.IsNullOrEmpty(args.OutputFile)
         ? new StreamWriter(args.OutputFile, false, Encoding.UTF8)
@@ -131,7 +131,7 @@ static int RunExport(CliArgs args)
 
     if (!string.IsNullOrEmpty(args.OutputFile))
         Console.Error.WriteLine("Done.");
-    return 0;
+    return ExitCodes.Success;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -151,7 +151,7 @@ static int RunUninstall(CliArgs args)
     if (args.Targets.Count > 1)
     {
         Console.Error.WriteLine($"{args.Targets.Count} targets given. Use 'bcu bulk ...' or add --bulk to uninstall multiple apps.");
-        return 1;
+        return ExitCodes.BadUsage;
     }
 
     if (string.IsNullOrWhiteSpace(args.TargetName)
@@ -159,12 +159,12 @@ static int RunUninstall(CliArgs args)
         && string.IsNullOrWhiteSpace(args.TargetRatingId))
     {
         Console.Error.WriteLine("Usage: bcu uninstall <name>|<list.bcul>|--registry-path <path>|--rating-id <id> [--exact] [--quiet-uninstall] [--safe-mode] [--yes] [--junk] [--junk-level <level>] [--dry-run]");
-        return 1;
+        return ExitCodes.BadUsage;
     }
 
     var all = Engine.ScanWithBanner(args);
     var entry = Engine.ResolveSingle(all, args);
-    if (entry == null) return 1;
+    if (entry == null) return ExitCodes.NotFound;
 
     Console.WriteLine($"Found:    {entry.DisplayName}");
     Console.WriteLine($"Version:  {entry.DisplayVersion ?? "(unknown)"}");
@@ -177,7 +177,7 @@ static int RunUninstall(CliArgs args)
     {
         Console.WriteLine("\nDRY RUN: re-run with --yes to uninstall.");
         if (args.RunJunk) Console.WriteLine("        (--junk cleanup would run afterwards)");
-        return 0;
+        return ExitCodes.Success;
     }
 
     Console.WriteLine("\nUninstalling...");
@@ -191,13 +191,13 @@ static int RunUninstall(CliArgs args)
     catch (Exception ex)
     {
         Console.Error.WriteLine($"Uninstall error: {ex.Message}");
-        return 1;
+        return ExitCodes.Error;
     }
 
     if (args.RunJunk)
         RunJunkForEntries(new[] { entry }, all, args);
 
-    return 0;
+    return ExitCodes.Success;
 }
 
 // ───────────────────────────────────────────────────────────────────────────────
@@ -235,7 +235,7 @@ static int RunListUninstall(UninstallList list, CliArgs args)
     if (entries.Count == 0)
     {
         Console.WriteLine("No installed applications matched the supplied uninstall list.");
-        return 0;
+        return ExitCodes.Success;
     }
 
     Console.WriteLine($"Uninstall list matched {entries.Count} installed application(s).");
@@ -257,7 +257,7 @@ static int RunJunk(CliArgs args)
         if (targets.Count == 0)
         {
             Console.Error.WriteLine($"No application found matching \"{args.TargetName}\".");
-            return 1;
+            return ExitCodes.NotFound;
         }
         return RunJunkForEntries(targets, all, args);
     }
@@ -268,7 +268,7 @@ static int RunJunk(CliArgs args)
         .Where(j => j.Confidence.GetConfidence() >= args.JunkLevel)
         .ToList();
 
-    if (pfJunk.Count == 0) { Console.WriteLine("No orphaned program files found."); return 0; }
+    if (pfJunk.Count == 0) { Console.WriteLine("No orphaned program files found."); return ExitCodes.Success; }
     return PresentAndCleanJunk(pfJunk, args);
 }
 
@@ -295,7 +295,7 @@ static int RunJunkForEntries(
     if (junk.Count == 0)
     {
         Console.WriteLine("No junk found above the confidence threshold.");
-        return 0;
+        return ExitCodes.Success;
     }
 
     return PresentAndCleanJunk(junk, args);
@@ -317,7 +317,7 @@ static int PresentAndCleanJunk(List<IJunkResult> junk, CliArgs args)
     if (!args.WillExecute)
     {
         Console.WriteLine($"\nDRY RUN: re-run with --yes to permanently delete the above {junk.Count} item(s).");
-        return 0;
+        return ExitCodes.Success;
     }
 
     Console.WriteLine("Cleaning junk...");
@@ -333,7 +333,7 @@ static int PresentAndCleanJunk(List<IJunkResult> junk, CliArgs args)
     }
 
     Console.WriteLine($"Done. Deleted: {deleted}  Failed: {failed}");
-    return failed > 0 ? 1 : 0;
+    return failed > 0 ? ExitCodes.PartialFailure : ExitCodes.Success;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -440,5 +440,5 @@ static int RunHelp()
           bcu info "Visual Studio Code"
           bcu junk "Discord" --junk-level VeryGood --yes
         """);
-    return 0;
+    return ExitCodes.Success;
 }

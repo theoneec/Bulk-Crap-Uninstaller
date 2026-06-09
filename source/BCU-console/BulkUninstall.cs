@@ -24,7 +24,7 @@ public static class BulkUninstall
         {
             Console.Error.WriteLine("Usage: bcu bulk <name> [<name> ...] [--prefer-quiet] [--concurrent N] [--yes]");
             Console.Error.WriteLine("       (or: bcu uninstall <name> <name> ... --bulk)");
-            return 1;
+            return ExitCodes.BadUsage;
         }
 
         var all = Engine.ScanWithBanner(args);
@@ -50,7 +50,7 @@ public static class BulkUninstall
         if (entries.Count == 0)
         {
             Console.Error.WriteLine("No applications matched. Nothing to do.");
-            return 1;
+            return ExitCodes.NotFound;
         }
 
         return RunForEntries(args, entries);
@@ -66,7 +66,7 @@ public static class BulkUninstall
         if (entries.Count == 0)
         {
             Console.Error.WriteLine("No applications matched. Nothing to do.");
-            return 1;
+            return ExitCodes.NotFound;
         }
 
         // Show the plan.
@@ -89,7 +89,7 @@ public static class BulkUninstall
         if (!args.WillExecute)
         {
             Console.WriteLine("\nDRY RUN: re-run with --yes to execute the bulk uninstall.");
-            return 0;
+            return ExitCodes.Success;
         }
 
         // Build and run the task.
@@ -148,6 +148,6 @@ public static class BulkUninstall
         }
 
         Console.WriteLine($"\nDone. Completed: {ok}  Failed: {failed}  Skipped: {skipped}  Other: {other}");
-        return failed > 0 ? 1 : 0;
+        return failed > 0 ? ExitCodes.PartialFailure : ExitCodes.Success;
     }
 }

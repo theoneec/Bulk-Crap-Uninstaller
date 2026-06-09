@@ -36,7 +36,7 @@ public static class StartupCommands
     private static int Usage()
     {
         Console.Error.WriteLine("Usage: bcu startup list|enable|disable [<match>] [--format json] [--yes]");
-        return 1;
+        return ExitCodes.BadUsage;
     }
 
     private static List<StartupEntryBase> GetAll(CliArgs args)
@@ -85,7 +85,7 @@ public static class StartupCommands
         }
 
         if (!args.Quiet) Console.Error.WriteLine($"\nTotal: {items.Count} startup entr(ies)");
-        return 0;
+        return ExitCodes.Success;
     }
 
     private static int Toggle(CliArgs args, bool enable)
@@ -93,7 +93,7 @@ public static class StartupCommands
         if (string.IsNullOrWhiteSpace(args.TargetName))
         {
             Console.Error.WriteLine($"Usage: bcu startup {(enable ? "enable" : "disable")} <match> [--yes]");
-            return 1;
+            return ExitCodes.BadUsage;
         }
 
         var match = args.TargetName;
@@ -107,7 +107,7 @@ public static class StartupCommands
         if (matched.Count == 0)
         {
             Console.Error.WriteLine($"No startup entry matching \"{match}\".");
-            return 1;
+            return ExitCodes.NotFound;
         }
 
         var verb = enable ? "enable" : "disable";
@@ -118,7 +118,7 @@ public static class StartupCommands
         if (!args.WillExecute)
         {
             Console.WriteLine($"\nDRY RUN: re-run with --yes to {verb}.");
-            return 0;
+            return ExitCodes.Success;
         }
 
         int changed = 0, failed = 0;
@@ -137,6 +137,6 @@ public static class StartupCommands
         }
 
         Console.WriteLine($"Done. {verb}d: {changed}  Failed: {failed}");
-        return failed > 0 ? 1 : 0;
+        return failed > 0 ? ExitCodes.PartialFailure : ExitCodes.Success;
     }
 }

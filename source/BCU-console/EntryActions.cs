@@ -35,12 +35,12 @@ public static class EntryActions
             string.IsNullOrWhiteSpace(args.TargetRatingId))
         {
             Console.Error.WriteLine($"Usage: bcu {verb.ToLowerInvariant()} <name>|--registry-path <path> [--yes]");
-            return 1;
+            return ExitCodes.BadUsage;
         }
 
         var all = Engine.ScanWithBanner(args);
         var entry = Engine.ResolveSingle(all, args);
-        if (entry == null) return 1;
+        if (entry == null) return ExitCodes.NotFound;
 
         bool isMsi = entry.BundleProviderKey != Guid.Empty;
         bool hasModify = !string.IsNullOrEmpty(entry.ModifyPath);
@@ -54,13 +54,13 @@ public static class EntryActions
         else
         {
             Console.Error.WriteLine($"This entry has no modify/repair mechanism (no MSI product code and no ModifyPath).");
-            return 1;
+            return ExitCodes.Error;
         }
 
         if (!args.WillExecute)
         {
             Console.WriteLine($"\nDRY RUN: re-run with --yes to {verb.ToLowerInvariant()}.");
-            return 0;
+            return ExitCodes.Success;
         }
 
         Console.WriteLine($"\n{verb}ing...");
@@ -75,7 +75,7 @@ public static class EntryActions
         catch (Exception ex)
         {
             Console.Error.WriteLine($"{verb} error: {ex.Message}");
-            return 1;
+            return ExitCodes.Error;
         }
     }
 
@@ -86,17 +86,17 @@ public static class EntryActions
         {
             Console.Error.WriteLine("Usage: bcu rename <name>|--registry-path <path> <new-name> [--yes]");
             Console.Error.WriteLine("       (or use --new-name <new-name>)");
-            return 1;
+            return ExitCodes.BadUsage;
         }
         if (string.IsNullOrWhiteSpace(args.NewName))
         {
             Console.Error.WriteLine("Missing new name. Provide it as the second argument or via --new-name.");
-            return 1;
+            return ExitCodes.BadUsage;
         }
 
         var all = Engine.ScanWithBanner(args);
         var entry = Engine.ResolveSingle(all, args);
-        if (entry == null) return 1;
+        if (entry == null) return ExitCodes.NotFound;
 
         Console.WriteLine($"Found:    {entry.DisplayName}");
         Console.WriteLine($"Rename → {args.NewName}");
@@ -105,13 +105,13 @@ public static class EntryActions
         if (!entry.IsRegistered || string.IsNullOrEmpty(entry.RegistryPath))
         {
             Console.Error.WriteLine("This entry is not backed by a writable registry key; rename is not possible.");
-            return 1;
+            return ExitCodes.Error;
         }
 
         if (!args.WillExecute)
         {
             Console.WriteLine("\nDRY RUN: re-run with --yes to rename.");
-            return 0;
+            return ExitCodes.Success;
         }
 
         try
@@ -123,7 +123,7 @@ public static class EntryActions
         catch (Exception ex)
         {
             Console.Error.WriteLine($"Rename error: {ex.Message}");
-            return 1;
+            return ExitCodes.Error;
         }
     }
 
@@ -135,12 +135,12 @@ public static class EntryActions
             string.IsNullOrWhiteSpace(args.TargetRatingId))
         {
             Console.Error.WriteLine("Usage: bcu delete-entry <name>|--registry-path <path> [--yes]");
-            return 1;
+            return ExitCodes.BadUsage;
         }
 
         var all = Engine.ScanWithBanner(args);
         var entry = Engine.ResolveSingle(all, args);
-        if (entry == null) return 1;
+        if (entry == null) return ExitCodes.NotFound;
 
         Console.WriteLine($"Found:    {entry.DisplayName}  {entry.DisplayVersion}");
         Console.WriteLine($"Reg key:  {entry.RegistryPath ?? "(none)"}");
@@ -151,25 +151,25 @@ public static class EntryActions
         if (!entry.IsRegistered || string.IsNullOrEmpty(entry.RegistryPath))
         {
             Console.Error.WriteLine("This entry is not registered in the registry; nothing to delete.");
-            return 1;
+            return ExitCodes.Error;
         }
 
         if (!args.WillExecute)
         {
             Console.WriteLine("\nDRY RUN: re-run with --yes to delete the registry entry.");
-            return 0;
+            return ExitCodes.Success;
         }
 
         try
         {
             RegistryTools.RemoveRegistryKey(entry.RegistryPath);
             Console.WriteLine("Registry entry deleted.");
-            return 0;
+            return ExitCodes.Success;
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"Delete error: {ex.Message}");
-            return 1;
+            return ExitCodes.Error;
         }
     }
 
@@ -181,12 +181,12 @@ public static class EntryActions
             string.IsNullOrWhiteSpace(args.TargetRatingId))
         {
             Console.Error.WriteLine("Usage: bcu info <name>|--registry-path <path>");
-            return 1;
+            return ExitCodes.BadUsage;
         }
 
         var all = Engine.ScanWithBanner(args);
         var entry = Engine.ResolveSingle(all, args);
-        if (entry == null) return 1;
+        if (entry == null) return ExitCodes.NotFound;
 
         // Associate startup entries so they show up in the dump.
         try
@@ -238,6 +238,6 @@ public static class EntryActions
                 Console.WriteLine($"  {(s.Disabled ? "[disabled] " : "")}{s}");
         }
 
-        return 0;
+        return ExitCodes.Success;
     }
 }

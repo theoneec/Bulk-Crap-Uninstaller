@@ -112,12 +112,12 @@ public static class Exporters
         if (string.IsNullOrWhiteSpace(args.ImportFile))
         {
             Console.Error.WriteLine("Usage: bcu import-list <file.xml> [--format table|json|csv]");
-            return 1;
+            return ExitCodes.BadUsage;
         }
         if (!File.Exists(args.ImportFile))
         {
             Console.Error.WriteLine($"File not found: {args.ImportFile}");
-            return 1;
+            return ExitCodes.NotFound;
         }
 
         List<ApplicationUninstallerEntry> items;
@@ -129,7 +129,7 @@ public static class Exporters
         catch (Exception ex)
         {
             Console.Error.WriteLine($"Failed to read BCU list: {ex.Message}");
-            return 1;
+            return ExitCodes.Error;
         }
 
         if (!args.Quiet)
@@ -147,7 +147,7 @@ public static class Exporters
                 Output.PrintTable(items, args.Wide, args.VerifyCerts);
                 break;
         }
-        return 0;
+        return ExitCodes.Success;
     }
 
     private static string EscapePsSingle(string s) => s.Replace("'", "''");

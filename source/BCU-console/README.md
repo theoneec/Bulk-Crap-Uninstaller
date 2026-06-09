@@ -214,13 +214,26 @@ For scripts written against the original `BCU-console`:
 
 ## Exit codes
 
-| Code | Meaning |
-|------|---------|
-| `0` | Success (or dry-run completed) |
-| non-zero (typically `1`) | Invalid usage, target not found, or one or more operations failed |
+Stable, documented codes (defined in `ExitCodes.cs`). Rule of thumb: **`0` =
+fully successful; any non-zero = not fully successful.** `1` stays a generic
+catch-all so existing `exit != 0` checks keep working.
 
-State-changing commands (`bulk`, `junk`, …) return non-zero if **any** target
-failed, so RMM jobs can detect partial failures.
+| Code | Name | Meaning |
+|------|------|---------|
+| `0` | Success | Completed — including a dry-run that printed its plan |
+| `1` | Error | Generic / unexpected failure |
+| `2` | BadUsage | Invalid arguments or command usage |
+| `3` | NotFound | The requested target app/entry was not found |
+| `4` | PartialFailure | A multi-item op (`bulk`/`junk`/`startup`) finished but one or more items failed |
+| `5` | NeedsElevation | Requires administrator/elevation that wasn't available *(reserved)* |
+| `6` | NeedsUserSession | Requires an interactive user session — e.g. Store-app or GUI-automated uninstall under SYSTEM/Session 0 *(reserved)* |
+| `7` | Timeout | A source scan or operation exceeded its timeout |
+| `8` | Cancelled | Cancelled by the user (Ctrl+C) |
+
+State-changing multi-item commands (`bulk`, `junk`, `startup enable/disable`)
+return `PartialFailure` (4) if **any** item failed, so RMM jobs can distinguish
+"all good" from "some failed". Codes `5`/`6` are defined and reserved for the
+upcoming context-aware work (see the repo wiki's RMM page).
 
 ---
 
