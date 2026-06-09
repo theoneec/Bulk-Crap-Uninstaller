@@ -13,7 +13,7 @@ namespace BcuCli;
 public enum Command
 {
     List, Export, Uninstall, Junk, Help,
-    Bulk, Repair, Modify, Rename, DeleteEntry, Startup, Info, ImportList, Serve
+    Bulk, Repair, Modify, Rename, DeleteEntry, Startup, Info, ImportList, Serve, Tui
 }
 
 public enum OutputFormat { Table, Json, Csv, Xml, Bat, Ps1 }
@@ -110,6 +110,8 @@ public class CliArgs
             case "info":        a.Command = Command.Info;        i = 1; break;
             case "import-list": a.Command = Command.ImportList;  i = 1; break;
             case "serve":       a.Command = Command.Serve;       i = 1; break;
+            case "tui": case "ui": case "interactive":
+                                a.Command = Command.Tui;         i = 1; break;
             case "help": case "--help": case "-h": case "/?":
                 a.Command = Command.Help; return a;
         }

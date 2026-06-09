@@ -86,7 +86,28 @@ bcu uninstall "Git" --dry-run  # forces dry-run even with --yes present
 | `junk [<name>]` | Find and clean leftover junk |
 | `import-list <file>` | Load a previously exported BCU `.xml` list |
 | `serve [--pipe <name>]` | Run a JSON-RPC API daemon over a named pipe (see below) |
+| `tui` (aliases `ui`, `interactive`) | Interactive full-screen terminal UI (see below) |
 | `help` | Show help |
+
+### `tui` — interactive terminal UI
+
+`bcu tui` launches an old-school, full-screen, keyboard-driven app for hands-on
+use (no RMM). Hand-rolled on `System.Console` — no extra dependencies. It refuses
+to run if stdin/stdout is redirected (use `bcu list` for scripting).
+
+| Key | Action |
+|-----|--------|
+| `↑` `↓` / `j` `k`, `PgUp/PgDn`, `Home/End` | Navigate |
+| `Space` | Toggle-select the highlighted app |
+| `a` / `A` | Select all (current filter) / clear all |
+| `/` or `s` | Live search (type to filter; `Esc` clears) |
+| `Enter` | Details panel for the highlighted app |
+| `u` | Uninstall selected (or highlighted) — shows a confirm screen |
+| `d` | Toggle **dry-run** (`u` only simulates) |
+| `o` | Cycle sort (name / publisher / size / source / date) |
+| `r` | Rescan · `?`/`F1` help · `q`/`Esc` quit |
+
+`u` always confirms first; with dry-run on it changes nothing.
 
 ### `serve` — JSON-RPC API daemon (for RMM / API helpers)
 
