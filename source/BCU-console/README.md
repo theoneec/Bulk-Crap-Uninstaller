@@ -236,6 +236,11 @@ return `PartialFailure` (4) if **any** item failed, so RMM jobs can distinguish
 "all good" from "some failed". Codes `5`/`6` are defined and reserved for the
 upcoming context-aware work (see the repo wiki's RMM page).
 
+### Cancellation
+`Ctrl+C` cancels the **scan** cooperatively and exits `Cancelled` (8). A second
+`Ctrl+C` force-quits. An **in-flight uninstall is not interrupted** — that is
+deliberate, so a partially-removed application can't be left behind.
+
 ---
 
 ## Examples

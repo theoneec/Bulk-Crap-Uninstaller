@@ -50,6 +50,19 @@ try { Console.OutputEncoding = Encoding.UTF8; } catch { }
 
 var cliArgs = CliArgs.Parse(Environment.GetCommandLineArgs().Skip(1).ToArray());
 
+// Ctrl+C: cancel the scan cooperatively and exit cleanly. First press unwinds the
+// scan (the long, hang-prone part); a second press force-quits. An in-flight
+// uninstall is intentionally not interrupted, to avoid leaving an app half-removed.
+using var cancellation = new CancellationTokenSource();
+Console.CancelKeyPress += (_, e) =>
+{
+    if (cancellation.IsCancellationRequested) return;   // second Ctrl+C => default behaviour (terminate)
+    e.Cancel = true;
+    Console.Error.WriteLine("\nCancelling... (press Ctrl+C again to force-quit)");
+    cancellation.Cancel();
+};
+Engine.CancelToken = cancellation.Token;
+
 try
 {
     return cliArgs.Command switch
@@ -69,6 +82,11 @@ try
         Command.ImportList  => Exporters.RunImportList(cliArgs),
         _                   => RunList(cliArgs)
     };
+}
+catch (OperationCanceledException)
+{
+    Console.Error.WriteLine("Cancelled.");
+    return ExitCodes.Cancelled;
 }
 catch (Exception ex)
 {

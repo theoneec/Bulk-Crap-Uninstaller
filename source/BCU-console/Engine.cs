@@ -20,6 +20,13 @@ namespace BcuCli;
 public static class Engine
 {
     /// <summary>
+    /// Cooperative cancellation for scans. Set by the CLI from Console.CancelKeyPress.
+    /// Checked inside the scan progress callback; uses BCU's existing
+    /// OperationCanceledException unwinding. Does not interrupt an in-flight uninstall.
+    /// </summary>
+    public static CancellationToken CancelToken { get; set; } = CancellationToken.None;
+
+    /// <summary>
     /// Run BCU's full application scan, applying the source flags from the CLI.
     /// Progress is written to stderr unless --quiet.
     /// </summary>
@@ -50,6 +57,9 @@ public static class Engine
         {
             return ApplicationUninstallerFactory.GetUninstallerEntries(report =>
             {
+                // Cooperative cancellation: throws OperationCanceledException, which BCU's
+                // engine already unwinds (ConcurrentApplicationFactory + main-thread scans).
+                CancelToken.ThrowIfCancellationRequested();
                 if (!args.Quiet && report.Message != lastMsg)
                 {
                     lastMsg = report.Message;
