@@ -85,6 +85,27 @@ directly). Build commands are in this file's history.
 
 ---
 
+### 5. CLI hardening (P0) + JSON-RPC API daemon
+Tracked as Forgejo issues #1–#5 (closed), with #6 for follow-ups.
+
+- **Exit codes** (#1): `ExitCodes.cs` — documented table (Success/Error/BadUsage/
+  NotFound/PartialFailure/NeedsElevation/NeedsUserSession/Timeout/Cancelled),
+  mapped across every command. `1` stays a generic catch-all.
+- **Helper timeouts** (#2): `FactoryTools` reads stdout async + bounds helpers with
+  `UninstallToolsGlobalConfig.HelperProcessTimeout` (default 120 s, kills the tree);
+  CLI `--source-timeout <secs>`.
+- **Cancellation** (#3): `Console.CancelKeyPress` → token → scan callback
+  `ThrowIfCancellationRequested` → exit `Cancelled`. In-flight uninstalls not
+  interrupted by design.
+- **Headless errors** (#4): `PremadeDialogs.HeadlessErrorHandler` — engine errors go
+  to stderr instead of a modal dialog / stdout (keeps `--format json` clean).
+- **`bcu serve`** (#5): named-pipe JSON-RPC daemon (`ServeCommand.cs`) — `ping`,
+  `inventory.list` (cached), `app.info`, `app.uninstall`, `bulk.uninstall`,
+  `junk.scan`/`junk.clean`, `shutdown`; dry-run unless `confirm:true`. Async jobs +
+  SYSTEM→user-session broker deferred to #6.
+
+---
+
 ## Known TODOs / not-yet-done
 
 - **Windows Update scanning under `dotnet build`** — `WinUpdateHelper` is
@@ -121,6 +142,11 @@ git merge upstream/master        # or: git rebase upstream/master
 
 | Commit | Description |
 |--------|-------------|
+| `0f315e77` | feature: `bcu serve` named-pipe JSON-RPC API helper (#5) |
+| `8c8b1fae` | P0: headless-safe engine errors, no UI dialogs (#4) |
+| `423d4322` | P0: cooperative Ctrl+C cancellation of scans (#3) |
+| `0fde8e39` | P0: helper invocation timeout (#2) |
+| `581e6051` | P0: structured, documented CLI exit codes (#1) |
 | `v6.1.0-cli.1` | **Release** — portable self-contained win-x64 bundle (GUI + CLI + 6 helpers) on Forgejo |
 | `98346135` | Wire engine helper EXEs into the BCU-console build |
 | `cbd495ce` | License compliance: Apache-2.0 headers and change notices |
