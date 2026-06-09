@@ -187,6 +187,14 @@ namespace UninstallTools
         /// </summary>
         public static bool QuietAutomatizationKillStuck { get; set; }
 
+        /// <summary>
+        ///     Maximum time to wait for a detection helper process (SteamHelper, StoreAppHelper,
+        ///     WinUpdateHelper, OculusHelper, ScriptHelper) before killing it and treating that
+        ///     source as empty. Prevents a single hung helper from hanging the whole scan.
+        ///     Zero or negative means wait indefinitely (the original behaviour).
+        /// </summary>
+        public static TimeSpan HelperProcessTimeout { get; set; } = TimeSpan.FromSeconds(120);
+
         public static bool ScanRegistry { get; set; } = true;
         public static bool ScanDrives { get; set; } = true;
         public static bool ScanPreDefined { get; set; } = true;

@@ -164,6 +164,7 @@ slow and unreliable in headless RMM contexts.
 | `--drives` | Enable drive-based directory detection |
 | `--oculus` | Enable Oculus scanning |
 | `--no-registry` / `--no-drives` / `--no-steam` / `--no-store` / `--no-choco` / `--no-scoop` / `--no-features` / `--no-updates` | Skip a specific source |
+| `--source-timeout <secs>` | Max seconds to wait for any detection helper EXE (Steam/Store/WinUpdate/Oculus/Script) before killing it and treating that source as empty. Default 120; `0` = wait indefinitely. Prevents a hung helper from hanging the whole scan. |
 
 > **Source helpers ship with the build.** The engine invokes helper EXEs by path
 > from the app folder (each `File.Exists`-guarded). `BCU-console.csproj`

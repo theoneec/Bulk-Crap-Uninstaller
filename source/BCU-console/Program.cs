@@ -390,6 +390,8 @@ static int RunHelp()
           --oculus                  Enable Oculus scanning
           --no-registry/-drives/-steam/-store/-choco/-scoop/-features/-updates
                                     Skip a specific source
+          --source-timeout <secs>   Max seconds to wait for any detection helper EXE
+                                    before killing it (default 120; 0 = no timeout)
 
         EXECUTION CONTEXT
           --run-as system|active-user   Intended context hint for RMM agents

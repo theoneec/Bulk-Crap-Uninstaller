@@ -40,6 +40,7 @@ public static class Engine
         UninstallToolsGlobalConfig.ScanPreDefined = !args.RmmSafe;
         UninstallToolsGlobalConfig.AutoDetectCustomProgramFiles = !args.RmmSafe;
         UninstallToolsGlobalConfig.AutoDetectScanRemovable = false;
+        UninstallToolsGlobalConfig.HelperProcessTimeout = args.SourceTimeout;
 
         string? lastMsg = null;
         var originalError = Console.Error;

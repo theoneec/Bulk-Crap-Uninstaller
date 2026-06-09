@@ -35,6 +35,9 @@ public class CliArgs
     public bool         RmmSafe { get; set; }
     public bool         VerifyCerts { get; set; }
 
+    /// <summary>Max time to wait for any detection helper EXE before killing it. Zero = no timeout.</summary>
+    public TimeSpan     SourceTimeout { get; set; } = TimeSpan.FromSeconds(120);
+
     // ── Inclusion ─────────────────────────────────────────────────────────────
     public bool IncludeSystem   { get; set; }
     public bool IncludeUpdates  { get; set; }
@@ -152,6 +155,11 @@ public class CliArgs
 
                 case "--filter":
                     if (i + 1 < raw.Length) a.Filter = raw[++i];
+                    break;
+
+                case "--source-timeout":
+                    if (i + 1 < raw.Length && int.TryParse(raw[++i], out var stSecs) && stSecs >= 0)
+                        a.SourceTimeout = TimeSpan.FromSeconds(stSecs);
                     break;
 
                 case "--sort":

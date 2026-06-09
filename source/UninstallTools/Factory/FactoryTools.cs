@@ -33,12 +33,36 @@ namespace UninstallTools.Factory
                 StandardOutputEncoding = Encoding.Unicode
             }))
             {
+                if (process == null) return null;
                 try
                 {
                     var sw = Stopwatch.StartNew();
-                    var output = process?.StandardOutput.ReadToEnd();
+
+                    // Read stdout asynchronously: avoids the classic full-pipe deadlock and
+                    // lets us bound the helper with a timeout. A hung helper must never hang
+                    // the whole scan (see HelperProcessTimeout).
+                    var readTask = process.StandardOutput.ReadToEndAsync();
+
+                    var timeoutMs = (int)UninstallToolsGlobalConfig.HelperProcessTimeout.TotalMilliseconds;
+                    bool exited;
+                    if (timeoutMs > 0)
+                        exited = process.WaitForExit(timeoutMs);
+                    else
+                    {
+                        process.WaitForExit();   // 0 / negative => wait indefinitely (legacy behaviour)
+                        exited = true;
+                    }
+
+                    if (!exited)
+                    {
+                        Trace.WriteLine($"[Helper] {filename} {args} timed out after {timeoutMs}ms - killing process tree");
+                        try { process.Kill(true); } catch (Exception killEx) { Trace.WriteLine(killEx); }
+                        return null;
+                    }
+
+                    var output = readTask.GetAwaiter().GetResult();
                     Trace.WriteLine($"[Performance] Running command {filename} {args} took {sw.ElapsedMilliseconds}ms");
-                    return process?.ExitCode == 0 ? output : null;
+                    return process.ExitCode == 0 ? output : null;
                 }
                 catch (Win32Exception ex)
                 {
