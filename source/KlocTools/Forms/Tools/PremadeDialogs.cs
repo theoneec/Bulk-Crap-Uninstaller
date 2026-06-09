@@ -24,6 +24,13 @@ namespace Klocman.Forms.Tools
         public static Action<Exception> SendErrorAction { get; set; }
 
         /// <summary>
+        ///     When set (e.g. by a headless CLI / RMM host), every GenericError call is routed
+        ///     here instead of writing to stdout or showing a modal message box. This keeps the
+        ///     engine usable without an interactive desktop and without corrupting stdout.
+        /// </summary>
+        public static Action<Exception> HeadlessErrorHandler { get; set; }
+
+        /// <summary>
         ///     Attempt to run the specified command then catch and display any exceptions in a message box.
         ///     True is returned if there were no exceptions thrown.
         /// </summary>
@@ -75,6 +82,12 @@ namespace Klocman.Forms.Tools
         {
             if (ex == null)
                 return;
+
+            if (HeadlessErrorHandler != null)
+            {
+                HeadlessErrorHandler(ex);
+                return;
+            }
 
             Console.WriteLine(@"Showing error message: " + ex);
 
@@ -135,6 +148,12 @@ namespace Klocman.Forms.Tools
         {
             if (string.IsNullOrEmpty(errorType))
                 return;
+
+            if (HeadlessErrorHandler != null)
+            {
+                HeadlessErrorHandler(new Exception(additionalInfo ?? errorType));
+                return;
+            }
 
             if (string.IsNullOrEmpty(additionalInfo))
                 additionalInfo = errorType;

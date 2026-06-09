@@ -37,6 +37,7 @@
 using System.Globalization;
 using System.Text;
 using BcuCli;
+using Klocman.Forms.Tools;
 using UninstallTools;
 using UninstallTools.Junk.Confidence;
 using UninstallTools.Junk.Containers;
@@ -49,6 +50,15 @@ Thread.CurrentThread.CurrentUICulture = CultureInfo.InvariantCulture;
 try { Console.OutputEncoding = Encoding.UTF8; } catch { }
 
 var cliArgs = CliArgs.Parse(Environment.GetCommandLineArgs().Skip(1).ToArray());
+
+// Headless: route the engine's non-fatal errors to stderr instead of a modal
+// message box (PremadeDialogs.GenericError would otherwise block with no desktop
+// and pollute stdout, corrupting --format json output).
+PremadeDialogs.HeadlessErrorHandler = ex =>
+{
+    if (!cliArgs.Quiet)
+        Console.Error.WriteLine($"[engine] {ex.Message}");
+};
 
 // Ctrl+C: cancel the scan cooperatively and exit cleanly. First press unwinds the
 // scan (the long, hang-prone part); a second press force-quits. An in-flight
