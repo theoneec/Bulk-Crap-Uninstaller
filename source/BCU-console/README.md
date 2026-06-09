@@ -85,7 +85,34 @@ bcu uninstall "Git" --dry-run  # forces dry-run even with --yes present
 | `info <target>` | Detailed properties + certificate dump |
 | `junk [<name>]` | Find and clean leftover junk |
 | `import-list <file>` | Load a previously exported BCU `.xml` list |
+| `serve [--pipe <name>]` | Run a JSON-RPC API daemon over a named pipe (see below) |
 | `help` | Show help |
+
+### `serve` — JSON-RPC API daemon (for RMM / API helpers)
+
+`bcu serve` hosts a resident JSON-RPC endpoint over a **named pipe** (default
+`\\.\pipe\bcu`, override with `--pipe <name>`) so an agent can drive the engine
+without re-scanning per call. Local only — no network surface.
+
+**Framing:** newline-delimited JSON, one object per line.
+Request `{"id":1,"method":"<m>","params":{...}}` →
+response `{"id":1,"result":{...}}` or `{"id":1,"error":{"code":N,"message":"..."}}`.
+
+**Methods:** `ping` · `inventory.list` `{refresh?,rmmSafe?,verifyCerts?,filter?}` ·
+`app.info` `{name|registryPath|ratingId,exact?}` ·
+`app.uninstall` `{<target>,quiet?,confirm?}` ·
+`bulk.uninstall` `{ids:[...],quiet?,confirm?}` ·
+`junk.scan` / `junk.clean` `{name?,level?,confirm?}` · `shutdown`.
+
+**Safety:** state-changing methods (`app.uninstall`, `bulk.uninstall`,
+`junk.clean`) only execute with `"confirm": true` — otherwise they return a
+**dry-run plan** (mirrors `--yes`). Inventory is cached; pass `refresh:true` to
+rescan. `Ctrl+C` stops the daemon. The response carries a `schemaVersion`.
+
+> First-cut: synchronous calls. An **async job model** (`job.status`) and a
+> **session-broker** (run per-user/Store and GUI-automation work in the active
+> console session from a SYSTEM launcher) are tracked as follow-ups on the wiki's
+> RMM page.
 
 **Targeting** (uninstall/repair/modify/rename/delete-entry/info/junk): by name
 (partial, or `--exact`), `--registry-path <path>`, or `--rating-id <id>`. Stable

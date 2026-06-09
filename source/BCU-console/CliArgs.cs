@@ -13,7 +13,7 @@ namespace BcuCli;
 public enum Command
 {
     List, Export, Uninstall, Junk, Help,
-    Bulk, Repair, Modify, Rename, DeleteEntry, Startup, Info, ImportList
+    Bulk, Repair, Modify, Rename, DeleteEntry, Startup, Info, ImportList, Serve
 }
 
 public enum OutputFormat { Table, Json, Csv, Xml, Bat, Ps1 }
@@ -31,6 +31,7 @@ public class CliArgs
     public bool         Quiet    { get; set; }
     public bool         JsonErrors { get; set; }
     public string?      OutputFile { get; set; }
+    public string?      PipeName   { get; set; }   // bcu serve --pipe <name>
     public RunAsMode    RunAs { get; set; } = RunAsMode.System;
     public bool         RmmSafe { get; set; }
     public bool         VerifyCerts { get; set; }
@@ -108,6 +109,7 @@ public class CliArgs
             case "startup":     a.Command = Command.Startup;     i = 1; break;
             case "info":        a.Command = Command.Info;        i = 1; break;
             case "import-list": a.Command = Command.ImportList;  i = 1; break;
+            case "serve":       a.Command = Command.Serve;       i = 1; break;
             case "help": case "--help": case "-h": case "/?":
                 a.Command = Command.Help; return a;
         }
@@ -168,6 +170,10 @@ public class CliArgs
 
                 case "--output": case "-o":
                     if (i + 1 < raw.Length) a.OutputFile = raw[++i];
+                    break;
+
+                case "--pipe":
+                    if (i + 1 < raw.Length) a.PipeName = raw[++i];
                     break;
 
                 case "--new-name":

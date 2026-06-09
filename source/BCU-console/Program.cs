@@ -90,6 +90,7 @@ try
         Command.Info        => EntryActions.RunInfo(cliArgs),
         Command.Junk        => RunJunk(cliArgs),
         Command.ImportList  => Exporters.RunImportList(cliArgs),
+        Command.Serve       => ServeCommand.Run(cliArgs),
         _                   => RunList(cliArgs)
     };
 }
@@ -395,6 +396,7 @@ static int RunHelp()
           bcu info      <target>               Detailed properties + certificate
           bcu junk      [<name>] [options]     Find/clean leftover junk
           bcu import-list <file>               Load a saved BCU list (.xml)
+          bcu serve     [--pipe <name>]        Run a JSON-RPC API daemon over a named pipe
           bcu help                             Show this help
 
         LIST / EXPORT OPTIONS
