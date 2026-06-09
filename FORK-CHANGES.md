@@ -8,6 +8,7 @@ change something that upstream doesn't have.
 - **Upstream:** `Klocman/Bulk-Crap-Uninstaller` (remote `upstream`)
 - **Fork origin:** `luadmin/Bulk-Crap-Uninstaller` (Forgejo), default branch `master`
 - **Forked from:** upstream `master` at `4ecea11b` (3 commits past tag `v6.1`)
+- **Wiki:** [helper + RMM docs](http://192.168.70.165:3000/luadmin/Bulk-Crap-Uninstaller/wiki) — per-helper reference, the invocation protocol, and the CLI/RMM improvement roadmap.
 
 ---
 
