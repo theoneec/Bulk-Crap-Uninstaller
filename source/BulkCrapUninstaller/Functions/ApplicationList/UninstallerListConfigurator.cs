@@ -111,10 +111,9 @@ namespace BulkCrapUninstaller.Functions.ApplicationList
                 results.Add(new Filter("Updates", true, new FilterCondition(true.ToString(),
                     ComparisonMethod.Equals, nameof(ApplicationUninstallerEntry.IsUpdate))));
 
-            // TODO Better detection, can lead to bugs down the line
             if (!_settings.Settings.FilterShowTweaks)
-                results.Add(new Filter("Tweaks", true, new FilterCondition(@"\Resources\Scripts\Tweak",
-                    ComparisonMethod.Contains, nameof(ApplicationUninstallerEntry.UninstallString))));
+                results.Add(new Filter("Tweaks", true, new FilterCondition(true.ToString(),
+                    ComparisonMethod.Equals, nameof(ApplicationUninstallerEntry.IsScriptTweak))));
 
             return results;
         }
@@ -143,11 +142,8 @@ namespace BulkCrapUninstaller.Functions.ApplicationList
 
             if (!_settings.Settings.FilterShowUpdates && entry.IsUpdate) return false;
 
-            if (entry.RatingId != null)
-            {
-                if (!_settings.Settings.FilterShowTweaks && entry.RatingId.StartsWith("tweak", StringComparison.Ordinal))
-                    return false;
-            }
+            if (!_settings.Settings.FilterShowTweaks && entry.IsScriptTweak)
+                return false;
 
             if (string.IsNullOrEmpty(_filteringFilterCondition.FilterText)) return true;
 
@@ -204,6 +200,11 @@ namespace BulkCrapUninstaller.Functions.ApplicationList
             _reference.olvColumnSystemComponent.AspectName = RegistryFactory.RegistryNameSystemComponent;
             _reference.olvColumnSystemComponent.AspectToStringConverter = ListViewDelegates.BoolToYesNoAspectConverter;
             _reference.olvColumnSystemComponent.GroupKeyToTitleConverter = ListViewDelegates.BoolToYesNoAspectConverter;
+
+            _reference.olvColumnCertificate.AspectGetter = y => ApplicationListConstants.GetApplicationCertificateText(y as ApplicationUninstallerEntry);
+
+            _reference.olvColumnIntegrity.AspectGetter = y => ApplicationListConstants.GetApplicationIntegrityText(y as ApplicationUninstallerEntry);
+            _reference.olvColumnIntegrity.AspectToStringConverter = x => x is string[] arr ? string.Join(", ", arr) : x?.ToString();
 
             _reference.olvColumnIs64.AspectGetter =
                 y => (y as ApplicationUninstallerEntry)?.Is64Bit.GetLocalisedName();

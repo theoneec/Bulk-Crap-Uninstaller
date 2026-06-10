@@ -130,4 +130,7 @@
     <value>"{0}" törlése</value>
     <comment>{0} is the name of application/folder to delete</comment>
   </data>
+  <data name="Program_ShowInvalidArgsBox_Message" xml:space="preserve">
+    <value>Érvénytelen az argumentumok száma. Adja meg az eltávolítandó mappa teljes elérési útját argumentumként, és szükség esetén a /q parancsot a csendes módhoz.</value>
+  </data>
 </root>

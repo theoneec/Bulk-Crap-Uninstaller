@@ -75,6 +75,12 @@ namespace Klocman.Forms.Tools
         }
 
         /// <summary>
+        /// Exception that is not sendable to the error report system. This is used for exceptions that are expected to be thrown and don't contain useful information.
+        /// </summary>
+        /// <inheritdoc />
+        public class NotSendableException(string message) : Exception(message);
+
+        /// <summary>
         ///     Show a generic error message with supplied exception info. Shows all inner exceptions and stack traces as well as a
         ///     copy button.
         /// </summary>
@@ -91,7 +97,7 @@ namespace Klocman.Forms.Tools
 
             Console.WriteLine(@"Showing error message: " + ex);
 
-            if (SendErrorAction != null)
+            if (SendErrorAction != null && ex is not NotSendableException)
                 SendErrorQuestion(ex);
             else
                 GenericError(ex.Message, GetExceptionDetailString(ex));

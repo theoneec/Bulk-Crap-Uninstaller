@@ -5,6 +5,8 @@
     Modified 2026 (BCU personal fork, theoneec): replaced the
     Scripting.FileSystemObjectClass COM dependency with a managed directory walk
     so directory-size calculation works under single-file/headless publish.
+    (es.exe / Everything fast-path retained, including upstream v6.2's improved
+    stderr diagnostics.)
 */
 
 using System;
@@ -109,7 +111,7 @@ namespace UninstallTools.Factory.InfoAdders
             {
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
-                RedirectStandardError = false,
+                RedirectStandardError = true,
                 CreateNoWindow = true,
                 StandardOutputEncoding = Encoding.UTF8
             }))
@@ -118,18 +120,33 @@ namespace UninstallTools.Factory.InfoAdders
 
                 var timeoutTask = Task.Delay(TimeSpan.FromSeconds(40));
                 var readOutputTask = process.StandardOutput.ReadToEndAsync();
+                var readErrorTask = process.StandardError.ReadToEndAsync();
 
                 await Task.WhenAny(readOutputTask, timeoutTask);
 
                 if (!readOutputTask.IsCompleted)
                 {
-                    try { process.Kill(); }
-                    catch { }
+                    try
+                    {
+                        process.Kill();
+                    }
+                    catch
+                    {
+                        // Ignore exceptions from killing the process
+                    }
                     throw new TimeoutException("es.exe appears to have hung");
                 }
 
-                if (process.ExitCode == 0) return await readOutputTask;
-                throw new IOException("es.exe failed to connect to Everything", process.ExitCode);
+                var output = await readOutputTask;
+                var errorOutput = await readErrorTask;
+                process.WaitForExit();
+
+                if (process.ExitCode == 0) return output;
+
+                var message = string.IsNullOrWhiteSpace(errorOutput)
+                    ? "es.exe failed to connect to Everything"
+                    : "es.exe failed to connect to Everything: " + errorOutput.Trim();
+                throw new IOException(message, process.ExitCode);
             }
         }
 

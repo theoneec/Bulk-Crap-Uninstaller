@@ -6251,6 +6251,19 @@ namespace BrightIdeasSoftware
             }
         }
 
+        protected override void OnGotFocus(EventArgs e)
+        {
+            try
+            {
+                base.OnGotFocus(e);
+            }
+            catch (InvalidOperationException)
+            {
+                // HACK: Eat InvalidOperationException coming from System.Windows.Forms.ListViewGroup.ListViewGroupAccessibleObject..ctor
+                // For some reason this started happening despite no code changes in ObjectListView. It seems to be caused by the move to newer .NET
+            }
+        }
+
         /// <summary>
         /// Handle the search for item m if possible.
         /// </summary>

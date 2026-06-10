@@ -221,6 +221,12 @@ namespace Klocman.Forms
                 _startAutomatically = false,
             };
 
+            if (loadBar.Owner != null && (loadBar.Owner.IsDisposed || !loadBar.Owner.IsHandleCreated))
+            {
+                // Owner is not valid, show the dialog without it
+                loadBar.Owner = null;
+            }
+
             loadBar.Show(loadBar.Owner);
             return loadBar;
         }
@@ -245,6 +251,12 @@ namespace Klocman.Forms
                 _startAutomatically = true
             })
             {
+                if (loadBar.Owner != null && (loadBar.Owner.IsDisposed || !loadBar.Owner.IsHandleCreated))
+                {
+                    // Owner is not valid, show the dialog without it
+                    loadBar.Owner = null;
+                }
+
                 loadBar.ShowDialog(loadBar.Owner);
                 return loadBar.Error;
             }

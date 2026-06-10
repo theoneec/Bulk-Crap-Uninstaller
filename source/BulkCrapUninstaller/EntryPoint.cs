@@ -17,6 +17,7 @@ using Klocman;
 using Klocman.Extensions;
 using Klocman.Forms;
 using Klocman.Forms.Tools;
+using Klocman.Tools;
 using UninstallTools.Dialogs;
 
 namespace BulkCrapUninstaller
@@ -136,7 +137,7 @@ namespace BulkCrapUninstaller
                 }
                 else
                 {
-                    CustomMessageBox.ShowDialog(null, new CmbBasicSettings("BCUninstaller is already running", "BCUninstaller is already running", "You can start only one instance of BCUninstaller. Close previous instances and try again. If you don't see the BCUninstaller window or it's not responding, try closing it with Task Manager.", Icon.ExtractAssociatedIcon(location), "OK"));
+                    CustomMessageBox.ShowDialog(null, new CmbBasicSettings("BCUninstaller is already running", "BCUninstaller is already running", "You can start only one instance of BCUninstaller. Close previous instances and try again. If you don't see the BCUninstaller window or it's not responding, try closing it with Task Manager.", DrawingTools.ExtractAssociatedIcon(location), "OK"));
                 }
             }
             catch (Exception ex)
