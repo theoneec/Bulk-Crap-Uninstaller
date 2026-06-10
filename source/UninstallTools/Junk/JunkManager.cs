@@ -1,12 +1,18 @@
 ﻿/*
     Copyright (c) 2017 Marcin Szeniak (https://github.com/Klocman/)
     Apache License Version 2.0
+
+    Modified 2026 (BCU personal fork, theoneec): FindJunk runs the independent
+    junk scanners in parallel (Parallel.ForEach) and reports accurate scanner
+    done/total progress, instead of scanning sequentially.
 */
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading.Tasks;
 using Klocman.Extensions;
 using Klocman.Forms.Tools;
 using Klocman.Tools;
@@ -130,30 +136,42 @@ namespace UninstallTools.Junk
                 junkCreator.Setup(allUninstallers);
             }
 
-            var results = new List<IJunkResult>();
             var targetEntries = targets as IList<ApplicationUninstallerEntry> ?? targets.ToList();
-            var progress = 0;
-            foreach (var junkCreator in scanners)
-            {
-                var scannerProgress = new ListGenerationProgress(progress++, scanners.Count, junkCreator.CategoryName);
 
-                var entryProgress = 0;
-                foreach (var target in targetEntries)
+            // Scanners are independent (separate instances; no shared mutable state after Setup),
+            // so run them in parallel. Results go into a thread-safe bag; progress is reported
+            // under a lock as each scanner finishes, giving accurate done/total counts.
+            var results = new ConcurrentBag<IJunkResult>();
+            var progressLock = new object();
+            var done = 0;
+            Parallel.ForEach(scanners,
+                new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount) },
+                junkCreator =>
                 {
-                    scannerProgress.Inner = new ListGenerationProgress(entryProgress++, targetEntries.Count, target.DisplayName);
-                    progressCallback(scannerProgress);
+                    foreach (var target in targetEntries)
+                    {
+                        try
+                        {
+                            foreach (var r in junkCreator.FindJunk(target))
+                                results.Add(r);
+                        }
+                        catch (SystemException ex) { PremadeDialogs.GenericError(ex); }
+                    }
 
-                    try { results.AddRange(junkCreator.FindJunk(target)); }
-                    catch (SystemException ex) { PremadeDialogs.GenericError(ex); }
-                }
-            }
+                    lock (progressLock)
+                    {
+                        done++;
+                        progressCallback(new ListGenerationProgress(done, scanners.Count, junkCreator.CategoryName));
+                    }
+                });
 
             progressCallback(new ListGenerationProgress(-1, 0, Localisation.Junk_Progress_Finishing));
 
+            var resultList = results.ToList();
             foreach (var target in targetEntries)
-                results.AddRange(target.AdditionalJunk);
+                resultList.AddRange(target.AdditionalJunk);
 
-            return CleanUpResults(results);
+            return CleanUpResults(resultList);
         }
 
         public static IEnumerable<IJunkResult> FindProgramFilesJunk(

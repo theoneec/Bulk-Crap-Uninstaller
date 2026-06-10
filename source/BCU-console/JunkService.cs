@@ -42,10 +42,13 @@ public static class JunkService
         return JunkManager.FindJunk(targets, all, report =>
             {
                 Engine.CancelToken.ThrowIfCancellationRequested();   // Ctrl+C / serve cancellation
-                if (progress != null && report.Message != last)
+                var msg = report.TotalCount > 0
+                    ? $"{report.Message} ({report.CurrentCount}/{report.TotalCount} scanners)"
+                    : report.Message;
+                if (progress != null && msg != last)
                 {
-                    last = report.Message;
-                    progress(report.Message);
+                    last = msg;
+                    progress(msg);
                 }
             })
             .Where(j => j.Confidence.GetConfidence() >= minLevel)
