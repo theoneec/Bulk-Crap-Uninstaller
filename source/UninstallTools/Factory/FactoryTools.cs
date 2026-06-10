@@ -1,6 +1,10 @@
 /*
     Copyright (c) 2018 Marcin Szeniak (https://github.com/Klocman/)
     Apache License Version 2.0
+
+    Modified 2026 (BCU personal fork, theoneec): StartHelperAndReadOutput reads
+    stdout asynchronously and enforces UninstallToolsGlobalConfig.HelperProcessTimeout
+    (kills the helper process tree on timeout) so a hung helper can't hang the scan.
 */
 
 using System;

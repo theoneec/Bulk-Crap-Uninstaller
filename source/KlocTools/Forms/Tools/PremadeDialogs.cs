@@ -1,6 +1,10 @@
 ﻿/*
     Copyright (c) 2017 Marcin Szeniak (https://github.com/Klocman/)
     Apache License Version 2.0
+
+    Modified 2026 (BCU personal fork, theoneec): added HeadlessErrorHandler so a
+    headless CLI/RMM host can route GenericError to a callback (stderr) instead of a
+    modal message box / stdout, keeping the engine usable without an interactive desktop.
 */
 
 using System;
