@@ -112,6 +112,21 @@ Tracked as Forgejo issues #1–#5 (closed), with #6 for follow-ups.
 - **`bcu tui`** (#7): hand-rolled interactive full-screen Console TUI (`TuiCommand.cs`,
   no deps) — arrows/space/search/uninstall+confirm/dry-run/sort + BCU banner splash.
 
+### 6. Cleanup-subsystem hardening (cli.1.1)
+Forgejo milestone `cli.1.1`, issues #10–#15.
+- **`JunkService.cs`** (#15): one shared scan/clean path for the `junk` command,
+  `serve junk.*`, and the TUI.
+- **Accurate deletes** (#10): the engine's junk `Delete()` methods now **surface
+  failures** instead of swallowing them — `RegistryKeyJunk`/`RegistryValueJunk`
+  throw if the key can't be opened, `RunProcessJunk` checks start+exit code,
+  `FileSystemJunk` verifies the path is gone after the recycle-bin delete. Cleanup
+  reports true deleted/failed counts. (§4b notices inline at each `Delete()`.)
+- **Backup before delete** (#11): `junk --backup <dir>` / serve `backupDir` calls
+  `Backup()` first and skips an item if its backup fails (files also → Recycle Bin).
+- **Machine-readable junk** (#13): `bcu junk --format json|csv` (+ `--output`).
+- **TUI junk** (#12): `c` key scans/cleans junk for selected/highlighted apps.
+- **Cancellation** (#14, partial): junk scan/clean honour `Engine.CancelToken`.
+
 ---
 
 ## Known TODOs / not-yet-done
@@ -150,6 +165,8 @@ git merge upstream/master        # or: git rebase upstream/master
 
 | Commit | Description |
 |--------|-------------|
+| `v6.2.0-cli.1.1` | **Release** — cleanup-subsystem hardening (milestone cli.1.1, #10–#15) |
+| `a6f3f7e7` | cleanup (cli.1.1): shared JunkService, accurate deletes, backup, --format, TUI junk |
 | `v6.2.0-cli.1` | **Release** (#9) — portable self-contained win-x64 bundle (GUI + CLI + 6 helpers) on Forgejo |
 | `578851e8` | License: §4b change notices on FactoryTools + PremadeDialogs |
 | `32d5209c` | serve: async jobs, context, pipe ACL, session-broker (#6) |
