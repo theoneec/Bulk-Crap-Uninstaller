@@ -62,7 +62,8 @@ public static class TuiCommand
     private static int RunLoop(CliArgs args)
     {
         Console.Clear();
-        Console.WriteLine("Scanning installed applications...");
+        ShowBanner();
+        Console.WriteLine("\n   Scanning installed applications...");
         var all = LoadRows(args, "name");
         var sortMode = 0;
         var dryRun = false;
@@ -312,6 +313,36 @@ public static class TuiCommand
             Press any key to return...
             """);
         Console.ReadKey(true);
+    }
+
+    private static void ShowBanner()
+    {
+        // Old-school block-letter splash (ANSI Shadow). Console.OutputEncoding is UTF-8
+        // (set in Program.cs) so the block/box-drawing glyphs render.
+        string[] art =
+        {
+            @"   ██████╗  ██████╗██╗   ██╗",
+            @"   ██╔══██╗██╔════╝██║   ██║",
+            @"   ██████╔╝██║     ██║   ██║",
+            @"   ██╔══██╗██║     ██║   ██║",
+            @"   ██████╔╝╚██████╗╚██████╔╝",
+            @"   ╚═════╝  ╚═════╝ ╚═════╝ ",
+        };
+        var v = typeof(TuiCommand).Assembly.GetName().Version;
+        var ver = v == null ? "" : $"v{v.Major}.{v.Minor}.{v.Build}";
+
+        var prevFg = Console.ForegroundColor;
+        Console.WriteLine();
+        // simple top-to-bottom shade for a little retro gradient
+        var shades = new[] { ConsoleColor.Cyan, ConsoleColor.Cyan, ConsoleColor.DarkCyan, ConsoleColor.DarkCyan, ConsoleColor.Blue, ConsoleColor.Blue };
+        for (var i = 0; i < art.Length; i++)
+        {
+            Console.ForegroundColor = shades[i % shades.Length];
+            Console.WriteLine(art[i]);
+        }
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.WriteLine($"      B u l k   C r a p   U n i n s t a l l e r  ·  CLI  {ver}");
+        Console.ForegroundColor = prevFg;
     }
 
     private static string DoUninstall(List<Row> view, int cursor, bool dryRun, CliArgs args)
