@@ -45,9 +45,13 @@ namespace UninstallTools.Junk.Containers
 
         public override void Delete()
         {
+            // Fork (theoneec): surface failure instead of silently no-opping when the key
+            // can't be opened (access denied / already gone), so callers get accurate results.
             using (var key = RegistryTools.OpenRegistryKey(RegKeyParentPath, true))
             {
-                key?.DeleteSubKeyTree(RegKeyName);
+                if (key == null)
+                    throw new IOException($"Could not open registry key for deletion: {RegKeyParentPath}");
+                key.DeleteSubKeyTree(RegKeyName);
             }
         }
 

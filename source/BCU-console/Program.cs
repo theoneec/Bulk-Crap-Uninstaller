@@ -36,6 +36,8 @@
 
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using BcuCli;
 using Klocman.Forms.Tools;
 using UninstallTools;
@@ -225,7 +227,7 @@ static int RunUninstall(CliArgs args)
     }
 
     if (args.RunJunk)
-        RunJunkForEntries(new[] { entry }, all, args);
+        PresentAndCleanJunk(ScanJunkForEntries(new[] { entry }, all, args), args);
 
     return ExitCodes.Success;
 }
@@ -280,6 +282,7 @@ static int RunListUninstall(UninstallList list, CliArgs args)
 static int RunJunk(CliArgs args)
 {
     var all = Engine.ScanWithBanner(args);
+    List<IJunkResult> junk;
 
     if (!string.IsNullOrWhiteSpace(args.TargetName))
     {
@@ -289,81 +292,123 @@ static int RunJunk(CliArgs args)
             Console.Error.WriteLine($"No application found matching \"{args.TargetName}\".");
             return ExitCodes.NotFound;
         }
-        return RunJunkForEntries(targets, all, args);
+        junk = ScanJunkForEntries(targets, all, args);
     }
-
-    // Junk for all — find orphaned program files
-    Console.WriteLine("Scanning for orphaned program files across all installed apps...");
-    var pfJunk = UninstallTools.Junk.JunkManager.FindProgramFilesJunk(all.ToList())
-        .Where(j => j.Confidence.GetConfidence() >= args.JunkLevel)
-        .ToList();
-
-    if (pfJunk.Count == 0) { Console.WriteLine("No orphaned program files found."); return ExitCodes.Success; }
-    return PresentAndCleanJunk(pfJunk, args);
-}
-
-static int RunJunkForEntries(
-    IEnumerable<ApplicationUninstallerEntry> targets,
-    ICollection<ApplicationUninstallerEntry> all,
-    CliArgs args)
-{
-    Console.Error.WriteLine("Scanning for leftover junk...");
-    string? lastMsg = null;
-    var junk = UninstallTools.Junk.JunkManager.FindJunk(targets, all, report =>
+    else
     {
-        if (!args.Quiet && report.Message != lastMsg)
-        {
-            lastMsg = report.Message;
-            Console.Error.Write($"\r  {report.Message,-60}");
-        }
-    })
-    .Where(j => j.Confidence.GetConfidence() >= args.JunkLevel)
-    .ToList();
-
-    if (!args.Quiet) Console.Error.WriteLine();
-
-    if (junk.Count == 0)
-    {
-        Console.WriteLine("No junk found above the confidence threshold.");
-        return ExitCodes.Success;
+        if (!args.Quiet) Console.Error.WriteLine("Scanning for orphaned program files across all installed apps...");
+        junk = JunkService.ScanOrphans(all, args.JunkLevel);
     }
 
     return PresentAndCleanJunk(junk, args);
 }
 
+// Used by both `bcu junk <name>` and `bcu uninstall --junk`.
+static List<IJunkResult> ScanJunkForEntries(
+    IEnumerable<ApplicationUninstallerEntry> targets,
+    ICollection<ApplicationUninstallerEntry> all,
+    CliArgs args)
+{
+    if (!args.Quiet) Console.Error.WriteLine("Scanning for leftover junk...");
+    var junk = JunkService.Scan(targets, all, args.JunkLevel, args.Quiet ? null
+        : msg => Console.Error.Write($"\r  {msg,-60}"));
+    if (!args.Quiet) Console.Error.WriteLine();
+    return junk;
+}
+
 static int PresentAndCleanJunk(List<IJunkResult> junk, CliArgs args)
 {
-    Console.WriteLine($"\nFound {junk.Count} junk item(s):\n");
+    var machine = args.Format is OutputFormat.Json or OutputFormat.Csv;
 
-    foreach (var level in new[] { ConfidenceLevel.VeryGood, ConfidenceLevel.Good, ConfidenceLevel.Questionable, ConfidenceLevel.Bad, ConfidenceLevel.Unknown })
+    if (junk.Count == 0)
     {
-        var group = junk.Where(j => j.Confidence.GetConfidence() == level).ToList();
-        if (group.Count == 0) continue;
-        Console.WriteLine($"  [{level}]");
-        foreach (var j in group)
-            Console.WriteLine($"    {j.Source?.CategoryName ?? "?"} — {j.GetDisplayName()}");
+        if (machine) WriteJunkOutput(junk, args, null);
+        else Console.WriteLine("No junk found above the confidence threshold.");
+        return ExitCodes.Success;
     }
 
     if (!args.WillExecute)
     {
-        Console.WriteLine($"\nDRY RUN: re-run with --yes to permanently delete the above {junk.Count} item(s).");
+        // Preview (dry-run). Machine formats emit the full list (for RMM review); text groups by confidence.
+        if (machine)
+        {
+            WriteJunkOutput(junk, args, null);
+        }
+        else
+        {
+            Console.WriteLine($"\nFound {junk.Count} junk item(s):\n");
+            foreach (var level in new[] { ConfidenceLevel.VeryGood, ConfidenceLevel.Good, ConfidenceLevel.Questionable, ConfidenceLevel.Bad, ConfidenceLevel.Unknown })
+            {
+                var group = junk.Where(j => j.Confidence.GetConfidence() == level).ToList();
+                if (group.Count == 0) continue;
+                Console.WriteLine($"  [{level}]");
+                foreach (var j in group)
+                    Console.WriteLine($"    {j.Source?.CategoryName ?? "?"} — {j.GetDisplayName()}");
+            }
+            Console.WriteLine($"\nDRY RUN: re-run with --yes to delete the above {junk.Count} item(s)"
+                + (args.BackupDir != null ? $" (backing up to {args.BackupDir} first)." : ". Files go to the Recycle Bin; registry/other are permanent."));
+        }
         return ExitCodes.Success;
     }
 
-    Console.WriteLine("Cleaning junk...");
-    int deleted = 0, failed = 0;
-    foreach (var j in junk)
+    if (!machine) Console.WriteLine(args.BackupDir != null ? $"Cleaning junk (backup -> {args.BackupDir})..." : "Cleaning junk...");
+    var res = JunkService.Clean(junk, args.BackupDir, (j, ok, err) =>
     {
-        try { j.Delete(); deleted++; }
-        catch (Exception ex)
+        if (!machine && !ok) Console.Error.WriteLine($"  Failed: [{j.GetDisplayName()}] — {err}");
+    });
+
+    WriteJunkOutput(junk, args, res);
+    if (!machine)
+        Console.WriteLine($"Done. Deleted: {res.Deleted}  Failed: {res.Failed}"
+            + (args.BackupDir != null ? $"  BackedUp: {res.BackedUp}" : ""));
+    return res.Failed > 0 ? ExitCodes.PartialFailure : ExitCodes.Success;
+}
+
+// Machine-readable (json/csv) junk output, honouring --output. res==null => preview only.
+static void WriteJunkOutput(List<IJunkResult> junk, CliArgs args, JunkCleanResult? res)
+{
+    if (args.Format is not (OutputFormat.Json or OutputFormat.Csv)) return;
+
+    string? ErrOf(IJunkResult j) => res?.Items.FirstOrDefault(i => ReferenceEquals(i.Item, j)).Error;
+    bool? DelOf(IJunkResult j) => res == null ? null : ErrOf(j) == null;
+
+    using var output = Output.OpenOutput(args);
+    var w = output ?? Console.Out;
+
+    if (args.Format == OutputFormat.Json)
+    {
+        var payload = new
         {
-            Console.Error.WriteLine($"  Failed to delete [{j.GetDisplayName()}]: {ex.Message}");
-            failed++;
+            count = junk.Count,
+            executed = res != null,
+            deleted = res?.Deleted,
+            failed = res?.Failed,
+            backedUp = res?.BackedUp,
+            items = junk.Select(j => new
+            {
+                category = j.Source?.CategoryName,
+                name = j.GetDisplayName(),
+                confidence = j.Confidence.GetConfidence().ToString(),
+                application = j.Application?.DisplayName,
+                deleted = DelOf(j),
+                error = ErrOf(j)
+            })
+        };
+        w.WriteLine(JsonSerializer.Serialize(payload,
+            new JsonSerializerOptions { WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull }));
+    }
+    else // Csv
+    {
+        w.WriteLine("confidence,category,application,name,deleted,error");
+        foreach (var j in junk)
+        {
+            string C(string? s) => "\"" + (s ?? "").Replace("\"", "\"\"") + "\"";
+            w.WriteLine(string.Join(",",
+                C(j.Confidence.GetConfidence().ToString()), C(j.Source?.CategoryName),
+                C(j.Application?.DisplayName), C(j.GetDisplayName()),
+                C(DelOf(j)?.ToString()), C(ErrOf(j))));
         }
     }
-
-    Console.WriteLine($"Done. Deleted: {deleted}  Failed: {failed}");
-    return failed > 0 ? ExitCodes.PartialFailure : ExitCodes.Success;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -438,6 +483,13 @@ static int RunHelp()
           --dry-run                 Force dry-run even with --yes
           --junk                    Also clean leftover junk after uninstall
           --junk-level <level>      VeryGood|Good|Questionable|Bad|Unknown (default Good)
+
+        JUNK OPTIONS  (bcu junk [<name>])
+          --junk-level <level>      Minimum confidence to act on (default Good)
+          --backup <dir>            Back up each item before deleting (item is skipped if
+                                    its backup fails). Files also go to the Recycle Bin.
+          --format json|csv         Machine-readable junk preview/result (+ --output <file>)
+          --yes                     Delete (without it: preview only) · --dry-run forces preview
 
         LEGACY BCU-console SWITCHES (for `uninstall <list.bcul>` back-compat)
           /Q                        Prefer quiet uninstallers

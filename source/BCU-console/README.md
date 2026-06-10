@@ -200,8 +200,15 @@ Multiple names without `--bulk` is an error (guards against fat-fingered mass un
 | Flag | Description |
 |------|-------------|
 | `--junk-level VeryGood\|Good\|Questionable\|Bad\|Unknown` | Confidence threshold (default: Good) |
-| `--yes, -y` | Delete (without it: dry-run lists items) |
-| `--dry-run` | Show what would be deleted |
+| `--backup <dir>` | Back up each item before deleting (registry keys export a `.reg`); an item is **skipped** if its backup fails. File/dir junk also goes to the **Recycle Bin** regardless. |
+| `--format json\|csv` | Machine-readable junk preview/result (with `--output <file>`) for RMM review-before-delete |
+| `--yes, -y` | Delete (without it: preview only) |
+| `--dry-run` | Force preview even with `--yes` |
+
+> Cleanup reports **accurate** deleted/failed counts — a delete that silently fails
+> (locked file, denied registry key, failed cleanup command) is now surfaced as a
+> failure, not counted as success. The `junk` command, `serve junk.*`, and the TUI
+> `c` key all share one cleanup path.
 
 ### Execution context
 | Flag | Description |

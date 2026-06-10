@@ -20,6 +20,7 @@ using System.Text.Json.Serialization;
 using UninstallTools;
 using UninstallTools.Junk;
 using UninstallTools.Junk.Confidence;
+using UninstallTools.Junk.Containers;
 using UninstallTools.Uninstaller;
 
 namespace BcuCli;
@@ -316,51 +317,52 @@ public static class ServeCommand
         var confirm = p?["confirm"]?.GetValue<bool>() ?? false;
         var levelStr = p?["level"]?.GetValue<string>() ?? "Good";
         if (!Enum.TryParse<ConfidenceLevel>(levelStr, true, out var level)) level = ConfidenceLevel.Good;
+        var backupDir = p?["backupDir"]?.GetValue<string>();
 
         var all = GetInventory(false, false);
-        var targets = all;
         var name = p?["name"]?.GetValue<string>();
-        if (!string.IsNullOrWhiteSpace(name))
-            targets = Engine.FindByName(all, name, false);
+        ICollection<ApplicationUninstallerEntry> targets =
+            string.IsNullOrWhiteSpace(name) ? all : Engine.FindByName(all, name, false);
 
-        var junk = JunkManager.FindJunk(targets, all, _ => { })
-            .Where(j => j.Confidence.GetConfidence() >= level)
-            .ToList();
-
-        // Preview list (always returned for scan; for clean dry-run too).
-        JsonArray Preview() =>
-            new(junk.Select(j => (JsonNode)new JsonObject
-            {
-                ["category"] = j.Source?.CategoryName,
-                ["name"] = j.GetDisplayName(),
-                ["confidence"] = j.Confidence.GetConfidence().ToString()
-            }).ToArray());
+        var junk = JunkService.Scan(targets, all, level);   // shared service: filter + cancellation
 
         if (!(clean && confirm))
-            return new JsonObject { ["dryRun"] = true, ["count"] = junk.Count, ["items"] = Preview() };
+            return new JsonObject
+            {
+                ["dryRun"] = true,
+                ["count"] = junk.Count,
+                ["items"] = new JsonArray(junk.Select(j => (JsonNode)JunkItemJson(j, null, null)).ToArray())
+            };
 
-        // clean + confirm => async deletion job
+        // clean + confirm => async deletion job (accurate counts + optional backup via JunkService)
         var job = NewJob("junk.clean");
         job.Total = junk.Count;
         RunJob(job, () =>
         {
             var items = new JsonArray();
-            foreach (var j in junk)
+            var res = JunkService.Clean(junk, backupDir, (j, ok, err) =>
             {
-                var item = new JsonObject
-                {
-                    ["category"] = j.Source?.CategoryName,
-                    ["name"] = j.GetDisplayName(),
-                    ["confidence"] = j.Confidence.GetConfidence().ToString()
-                };
-                try { j.Delete(); item["deleted"] = true; }
-                catch (Exception ex) { item["error"] = ex.Message; job.Failed++; }
                 job.Done++;
-                items.Add(item);
-            }
-            job.Result = new JsonObject { ["deleted"] = job.Done - job.Failed, ["failed"] = job.Failed, ["items"] = items };
+                if (!ok) job.Failed++;
+                items.Add(JunkItemJson(j, ok, err));
+            });
+            job.Result = new JsonObject { ["deleted"] = res.Deleted, ["failed"] = res.Failed, ["backedUp"] = res.BackedUp, ["items"] = items };
         });
         return new JsonObject { ["jobId"] = job.Id, ["state"] = job.State, ["total"] = job.Total };
+    }
+
+    private static JsonObject JunkItemJson(IJunkResult j, bool? deleted, string? error)
+    {
+        var o = new JsonObject
+        {
+            ["category"] = j.Source?.CategoryName,
+            ["name"] = j.GetDisplayName(),
+            ["confidence"] = j.Confidence.GetConfidence().ToString(),
+            ["application"] = j.Application?.DisplayName
+        };
+        if (deleted.HasValue) o["deleted"] = deleted.Value;
+        if (error != null) o["error"] = error;
+        return o;
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────────

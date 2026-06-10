@@ -9,6 +9,8 @@
 
 using System.Text;
 using UninstallTools;
+using UninstallTools.Junk.Confidence;
+using UninstallTools.Junk.Containers;
 using UninstallTools.Uninstaller;
 
 namespace BcuCli;
@@ -161,6 +163,10 @@ public static class TuiCommand
                     status = "Rescanned.";
                     break;
 
+                case ConsoleKey.C:
+                    status = DoJunk(view, cursor, all, dryRun);
+                    break;
+
                 case ConsoleKey.U:
                     status = DoUninstall(view, cursor, dryRun, args);
                     if (!dryRun)
@@ -226,7 +232,7 @@ public static class TuiCommand
             WriteAt(0, rowY, line, fg, bg);
         }
 
-        var hint = " ↑↓/jk move · space select · / search · enter info · u uninstall · d dry-run · o sort · r rescan · ? help · q quit";
+        var hint = " ↑↓/jk move · space select · / search · enter info · u uninstall · c clean-junk · d dry-run · o sort · r rescan · ? help · q quit";
         WriteAt(0, listRows + 2, hint, ConsoleColor.Black, ConsoleColor.DarkGray);
         WriteAt(0, listRows + 3, " " + status, ConsoleColor.Green, ConsoleColor.Black);
     }
@@ -301,7 +307,8 @@ public static class TuiCommand
               / or s           Search/filter (type to filter live; Esc clears)
               Enter            Show details for the highlighted app
               u                Uninstall selected (or highlighted) apps — asks to confirm
-              d                Toggle DRY-RUN (u only simulates)
+              c                Scan/clean leftover junk for selected (or highlighted) apps
+              d                Toggle DRY-RUN (u and c only simulate)
               o                Cycle sort (name / publisher / size / source / date)
               r                Rescan installed apps
               ? or F1          This help
@@ -343,6 +350,57 @@ public static class TuiCommand
         Console.ForegroundColor = ConsoleColor.DarkGray;
         Console.WriteLine($"      B u l k   C r a p   U n i n s t a l l e r  ·  CLI  {ver}");
         Console.ForegroundColor = prevFg;
+    }
+
+    private static string DoJunk(List<Row> view, int cursor, List<Row> all, bool dryRun)
+    {
+        var targets = all.Where(r => r.Selected).Select(r => r.Entry).ToList();
+        if (targets.Count == 0 && view.Count > 0) targets.Add(view[cursor].Entry);
+        if (targets.Count == 0) return "No target for junk scan.";
+
+        Console.ResetColor();
+        Console.Clear();
+        Console.WriteLine($"Scanning leftover junk for {targets.Count} app(s)...\n");
+        List<IJunkResult> junk;
+        try
+        {
+            junk = JunkService.Scan(targets, all.Select(r => r.Entry).ToList(), ConfidenceLevel.Good,
+                msg => Console.Write($"\r  {msg,-60}"));
+        }
+        catch (Exception ex) { return "Junk scan failed: " + ex.Message; }
+        Console.WriteLine();
+
+        if (junk.Count == 0) { Console.WriteLine("\nNo junk found (Good+). Press any key..."); Console.ReadKey(true); return "No junk found."; }
+
+        Console.WriteLine($"\nFound {junk.Count} junk item(s) (confidence Good+):\n");
+        foreach (var level in new[] { ConfidenceLevel.VeryGood, ConfidenceLevel.Good })
+        {
+            var group = junk.Where(j => j.Confidence.GetConfidence() == level).ToList();
+            if (group.Count == 0) continue;
+            Console.WriteLine($"  [{level}]  ({group.Count})");
+            foreach (var j in group.Take(40))
+                Console.WriteLine($"    {j.Source?.CategoryName ?? "?"} — {j.GetDisplayName()}");
+            if (group.Count > 40) Console.WriteLine($"    ... and {group.Count - 40} more");
+        }
+
+        if (dryRun)
+        {
+            Console.WriteLine($"\nDRY-RUN: would delete {junk.Count} item(s) (files -> Recycle Bin, registry permanent). Press any key...");
+            Console.ReadKey(true);
+            return $"Dry-run: {junk.Count} junk item(s).";
+        }
+
+        Console.Write($"\nDelete these {junk.Count} item(s)? [y/N] ");
+        if (Console.ReadKey(true).Key != ConsoleKey.Y) return "Junk cleanup cancelled.";
+
+        Console.WriteLine("\n\nCleaning...");
+        var res = JunkService.Clean(junk, null, (j, ok, err) =>
+        {
+            if (!ok) Console.WriteLine($"  failed: {j.GetDisplayName()} — {err}");
+        });
+        Console.WriteLine($"\nDone. deleted={res.Deleted} failed={res.Failed}. Press any key...");
+        Console.ReadKey(true);
+        return $"Junk: deleted={res.Deleted} failed={res.Failed}.";
     }
 
     private static string DoUninstall(List<Row> view, int cursor, bool dryRun, CliArgs args)

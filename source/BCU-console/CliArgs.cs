@@ -32,6 +32,7 @@ public class CliArgs
     public bool         JsonErrors { get; set; }
     public string?      OutputFile { get; set; }
     public string?      PipeName   { get; set; }   // bcu serve --pipe <name>
+    public string?      BackupDir  { get; set; }   // junk --backup <dir>: back up each item before deleting
     public RunAsMode    RunAs { get; set; } = RunAsMode.System;
     public bool         RmmSafe { get; set; }
     public bool         VerifyCerts { get; set; }
@@ -176,6 +177,10 @@ public class CliArgs
 
                 case "--pipe":
                     if (i + 1 < raw.Length) a.PipeName = raw[++i];
+                    break;
+
+                case "--backup":
+                    if (i + 1 < raw.Length) a.BackupDir = raw[++i];
                     break;
 
                 case "--new-name":

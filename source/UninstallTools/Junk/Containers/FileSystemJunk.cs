@@ -34,6 +34,13 @@ namespace UninstallTools.Junk.Containers
                     RecycleOption.SendToRecycleBin, UICancelOption.DoNothing);
             else
                 throw new NotImplementedException("Unknown FileSystemInfo implementation");
+
+            // Fork (theoneec): the VB recycle-bin delete above swallows failures
+            // (UICancelOption.DoNothing). Verify the path is actually gone so callers get
+            // accurate deleted/failed counts instead of false "success".
+            Path.Refresh();
+            if (Path.Exists)
+                throw new IOException($"Failed to delete (still present after recycle): {Path.FullName}");
         }
 
         public override string GetDisplayName()

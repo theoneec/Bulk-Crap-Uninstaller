@@ -29,17 +29,19 @@ namespace UninstallTools.Junk.Containers
 
         public override void Delete()
         {
-            try
-            {
-                var info = ProcessToStart.ToProcessStartInfo();
-                info.WindowStyle = ProcessWindowStyle.Minimized;
-                info.UseShellExecute = true;
-                Process.Start(info)?.WaitForExit();
-            }
-            catch (SystemException ex)
-            {
-                Trace.WriteLine($"Failed to delete junk {GetDisplayName()} - {ex}");
-            }
+            // Fork (theoneec): surface failure instead of swallowing it - verify the cleanup
+            // process actually started and exited cleanly so callers get accurate results.
+            var info = ProcessToStart.ToProcessStartInfo();
+            info.WindowStyle = ProcessWindowStyle.Minimized;
+            info.UseShellExecute = true;
+
+            var process = Process.Start(info);
+            if (process == null)
+                throw new InvalidOperationException($"Could not start cleanup process for {GetDisplayName()}");
+
+            process.WaitForExit();
+            if (process.ExitCode != 0)
+                throw new InvalidOperationException($"Cleanup process for {GetDisplayName()} exited with code {process.ExitCode}");
         }
 
         public override string GetDisplayName()
