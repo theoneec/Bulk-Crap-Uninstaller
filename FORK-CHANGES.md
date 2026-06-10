@@ -125,7 +125,11 @@ Forgejo milestone `cli.1.1`, issues #10–#15.
   `Backup()` first and skips an item if its backup fails (files also → Recycle Bin).
 - **Machine-readable junk** (#13): `bcu junk --format json|csv` (+ `--output`).
 - **TUI junk** (#12): `c` key scans/cleans junk for selected/highlighted apps.
-- **Cancellation** (#14, partial): junk scan/clean honour `Engine.CancelToken`.
+- **Parallel scan + progress + cancellation** (#14): `JunkManager.FindJunk` runs the
+  independent scanners with `Parallel.ForEach`, surfaces `done/total` scanner
+  progress, and honours `Engine.CancelToken`.
+
+Milestone `cli.1.1` is complete (#10–#15); shipped in `v6.2.0-cli.1.1`.
 
 ---
 
