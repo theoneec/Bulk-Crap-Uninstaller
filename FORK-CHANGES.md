@@ -8,6 +8,7 @@ change something that upstream doesn't have.
 - **Upstream:** `Klocman/Bulk-Crap-Uninstaller` (remote `upstream`)
 - **Fork origin:** `luadmin/Bulk-Crap-Uninstaller` (Forgejo), default branch `master`
 - **Forked from:** upstream `master` at `4ecea11b` (3 commits past tag `v6.1`)
+- **Synced to:** upstream **v6.2** (`51d6ca77`) — merged in `c6e488f0`. `Version` is `6.2`.
 - **Wiki:** [helper + RMM docs](http://192.168.70.165:3000/luadmin/Bulk-Crap-Uninstaller/wiki) — per-helper reference, the invocation protocol, and the CLI/RMM improvement roadmap.
 
 ---
@@ -20,7 +21,7 @@ headless build. Three changes fix that:
 
 | File | Change |
 |------|--------|
-| `Factory/InfoAdders/FastSizeGenerator.cs` | Replaced the `Scripting.FileSystemObjectClass` COM dependency (fails under single-file/headless) with a managed directory walk. |
+| `Factory/InfoAdders/FastSizeGenerator.cs` | Replaced the `Scripting.FileSystemObjectClass` COM dependency (fails under single-file/headless) with a managed directory walk. The `es.exe`/Everything fast-path is kept, including upstream v6.2's improved stderr diagnostics. |
 | `UninstallToolsGlobalConfig.cs` | Falls back to `AppContext.BaseDirectory` when `Assembly.Location` is empty (as under single-file publish) so bundled helper EXEs are still found. |
 | `UninstallTools.csproj` | Removed the `Scripting` COMReference (breaks single-file publish). |
 
@@ -142,6 +143,10 @@ git merge upstream/master        # or: git rebase upstream/master
 
 | Commit | Description |
 |--------|-------------|
+| `c6e488f0` | **Sync to upstream v6.2** (#8) — merged 24 commits; conflicts in FastSizeGenerator.cs + PremadeDialogs.cs resolved (patches re-applied, upstream's es.exe/NotSendableException improvements kept) |
+| `a57349a0` | tui: BCU block-letter banner splash (#7) |
+| `96e110cc` | tui: "Rescanning…" indicator after uninstall (#7) |
+| `91b3a89b` | feature: `bcu tui` interactive terminal UI (#7) |
 | `0f315e77` | feature: `bcu serve` named-pipe JSON-RPC API helper (#5) |
 | `8c8b1fae` | P0: headless-safe engine errors, no UI dialogs (#4) |
 | `423d4322` | P0: cooperative Ctrl+C cancellation of scans (#3) |
@@ -156,5 +161,7 @@ git merge upstream/master        # or: git rebase upstream/master
 | `4ecea11b` | *(upstream base — last commit shared with Klocman/master)* |
 
 > When you add a fork-specific change: update the relevant section above and add
-> a row here. Keep `4ecea11b` as the marker for the upstream fork point until you
-> re-sync with upstream.
+> a row here. The current upstream sync point is **v6.2** (`51d6ca77`, merged in
+> `c6e488f0`); use `git fetch upstream && git merge upstream/master` to go further.
+> Likely conflict files on the next sync: the two we patch — `FastSizeGenerator.cs`
+> and `PremadeDialogs.cs` — plus anything touching `source/BCU-console/*`.
