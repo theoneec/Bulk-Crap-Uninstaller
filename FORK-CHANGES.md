@@ -69,8 +69,10 @@ with the full `bcu-cli` engine CLI.
   zip (§4a/§4d for binary redistribution).
 
 ### 4. Releases
-Published to the Forgejo repo under tag `v6.1.0-cli.1` as a single **portable**
-asset — download, unzip, run; no installer and no .NET runtime required:
+Published to the Forgejo repo as single **portable** assets — download, unzip,
+run; no installer and no .NET runtime required. Latest: **`v6.2.0-cli.1`**
+(upstream v6.2 base + P0 hardening + `serve` async/context/broker + `tui`).
+Earlier: `v6.1.0-cli.1`. Each is:
 
 - `BulkCrapUninstaller-v6.1.0-cli.1-win-x64-portable.zip` (~80 MB) — a
   **self-contained win-x64** bundle of the whole app: GUI (`BCUninstaller.exe`)
@@ -148,6 +150,8 @@ git merge upstream/master        # or: git rebase upstream/master
 
 | Commit | Description |
 |--------|-------------|
+| `v6.2.0-cli.1` | **Release** (#9) — portable self-contained win-x64 bundle (GUI + CLI + 6 helpers) on Forgejo |
+| `578851e8` | License: §4b change notices on FactoryTools + PremadeDialogs |
 | `32d5209c` | serve: async jobs, context, pipe ACL, session-broker (#6) |
 | `c6e488f0` | **Sync to upstream v6.2** (#8) — merged 24 commits; conflicts in FastSizeGenerator.cs + PremadeDialogs.cs resolved (patches re-applied, upstream's es.exe/NotSendableException improvements kept) |
 | `a57349a0` | tui: BCU block-letter banner splash (#7) |
