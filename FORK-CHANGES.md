@@ -100,10 +100,15 @@ Tracked as Forgejo issues #1–#5 (closed), with #6 for follow-ups.
   interrupted by design.
 - **Headless errors** (#4): `PremadeDialogs.HeadlessErrorHandler` — engine errors go
   to stderr instead of a modal dialog / stdout (keeps `--format json` clean).
-- **`bcu serve`** (#5): named-pipe JSON-RPC daemon (`ServeCommand.cs`) — `ping`,
-  `inventory.list` (cached), `app.info`, `app.uninstall`, `bulk.uninstall`,
-  `junk.scan`/`junk.clean`, `shutdown`; dry-run unless `confirm:true`. Async jobs +
-  SYSTEM→user-session broker deferred to #6.
+- **`bcu serve`** (#5, #6): named-pipe JSON-RPC daemon (`ServeCommand.cs`) — `ping`,
+  `context`, `inventory.list` (cached), `app.info`, `app.uninstall`,
+  `bulk.uninstall`, `junk.scan`/`junk.clean`, `job.status`, `job.list`,
+  `session.launch`, `shutdown`; dry-run unless `confirm:true`. **Async job model**
+  (confirmed ops return a `jobId`, run on a background task, poll `job.status`),
+  **pipe ACL** (current user + SYSTEM), **context/session awareness** + a SYSTEM→
+  user-session broker (`UserSessionLauncher.cs`, `CreateProcessAsUser`).
+- **`bcu tui`** (#7): hand-rolled interactive full-screen Console TUI (`TuiCommand.cs`,
+  no deps) — arrows/space/search/uninstall+confirm/dry-run/sort + BCU banner splash.
 
 ---
 
@@ -143,6 +148,7 @@ git merge upstream/master        # or: git rebase upstream/master
 
 | Commit | Description |
 |--------|-------------|
+| `32d5209c` | serve: async jobs, context, pipe ACL, session-broker (#6) |
 | `c6e488f0` | **Sync to upstream v6.2** (#8) — merged 24 commits; conflicts in FastSizeGenerator.cs + PremadeDialogs.cs resolved (patches re-applied, upstream's es.exe/NotSendableException improvements kept) |
 | `a57349a0` | tui: BCU block-letter banner splash (#7) |
 | `96e110cc` | tui: "Rescanning…" indicator after uninstall (#7) |
