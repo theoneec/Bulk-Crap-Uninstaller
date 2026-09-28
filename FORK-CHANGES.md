@@ -5,10 +5,10 @@ by Marcin Szeniak (Apache License 2.0). This file is the single, maintained
 record of how this fork diverges from upstream — keep it current whenever you
 change something that upstream doesn't have.
 
-- **Upstream:** `Klocman/Bulk-Crap-Uninstaller` (remote `upstream`)
+- **Upstream:** `BCUninstaller/Bulk-Crap-Uninstaller` (formerly `Klocman/…`; remote `upstream`)
 - **Fork origin:** `luadmin/Bulk-Crap-Uninstaller` (Forgejo), default branch `master`
 - **Forked from:** upstream `master` at `4ecea11b` (3 commits past tag `v6.1`)
-- **Synced to:** upstream **v6.2** (`51d6ca77`) — merged in `c6e488f0`. `Version` is `6.2`.
+- **Synced to:** upstream **v6.3** (`30da6093`, master) — merged in `6d748a62`. `Version` is `6.3`.
 - **Wiki:** [helper + RMM docs](http://192.168.70.165:3000/luadmin/Bulk-Crap-Uninstaller/wiki) — per-helper reference, the invocation protocol, and the CLI/RMM improvement roadmap.
 
 ---
@@ -131,6 +131,55 @@ Forgejo milestone `cli.1.1`, issues #10–#15.
 
 Milestone `cli.1.1` is complete (#10–#15); shipped in `v6.2.0-cli.1.1`.
 
+### 7. Upstream v6.3 sync + full GUI parity in the CLI (cli.2)
+- **Upstream v6.3 merged** (`6d748a62`): Custom Notes, ARM64 portable, NSIS
+  quiet-uninstall checks, translations. The fork's history had been rewritten after
+  the v6.2 sync, so the merge was done against an explicit base of upstream
+  `51d6ca77` (tree-identical to the fork's v6.2 parent). Future `git merge
+  upstream/master` calls find `30da6093` as the base normally. The only conflict was
+  `BCU-console/Program.cs`; the fork's CLI was kept, and it already covers
+  upstream's stub additions (json list/export, `/N` dry-run, no ReadKey hang).
+- **New commands:** `msi`, `uninstall-dir`, `target`, `manual-uninstall`,
+  `clean-program-files`, `notes`, `restore-point`, `reg-backup`, `make-list`,
+  `open`, `search-online`, `run`, `take-ownership`, `tools`, plus `startup
+  delete|backup|all-users|current-user|move-to-registry` and `export --format
+  store-ps1`. (New files `GuiParityCommands.cs`, `NotesCommands.cs`,
+  `JunkCommands.cs`, `UninstallSupport.cs`.)
+- **GUI uninstall-wizard behaviour on uninstall/bulk/msi:** `--with-related`,
+  `--close-apps`, `--restore-point`, `--reg-backup`, `--pre-/--post-command`,
+  `--simulate`, intelligent sort (on by default), and `--junk` on bulk.
+  `uninstall`/`bulk --format json` return a JSON plan/result for RMM.
+- **Filters and scan settings:** `--preset …`, `--kind`, `--hide-microsoft`,
+  `--invalid`, `--list <bcul>`, `--msi-guid` targeting, `--no-predefined`,
+  `--custom-folders`, `--no-folder-autodetect`, `--scan-removable`,
+  `--quiet-automation[-kill-stuck]`, `--use-daemon`, `--cache`.
+- **Exit codes:** new `9 RebootRequired`. Single uninstall/msi/repair/modify now
+  map the uninstaller's exit code (a failed uninstaller is no longer reported as
+  0, and raw msiexec codes no longer collide with the CLI table).
+- **Junk:** deletes run in the GUI's order (leftover uninstallers first, then
+  startup entries, then the rest).
+- **Engine patch** (`UninstallTools/CustomNotesManager.cs`, §4b notice inline):
+  diagnostics go to stderr, not stdout; added `NotesFile`, `GetAllNotes`,
+  `TrySetNote`.
+- **Safe post-uninstall cleanup:** `--junk` after a single `uninstall`/`msi` runs
+  only if the uninstaller succeeded (0 or reboot-required) *and* the app's registry
+  entry is gone. `--simulate` never deletes leftovers (uninstall, bulk, msi,
+  uninstall-dir). This matches the GUI, which only offers a leftover scan for
+  completed uninstalls.
+- Not ported: user ratings (web service, GUI-only code), clipboard copy.
+
+### 8. GitHub release pipeline
+- **`.github/workflows/release.yml`:** on a `v*` tag push, or a manual run with a
+  tag, it builds the self-contained portable bundles the way `publish.bat` does
+  (all exe projects per architecture + the native `BCU-launcher`). It then
+  smoke-tests `bcu.exe` on the Windows runner (help, `list --rmm-safe --format
+  json`, dry-run uninstall, exit codes 2/3, the `BCU-console.exe` alias) and
+  publishes a GitHub Release with `BCU-<tag>-win-x64.zip`, `-win-arm64.zip`,
+  `-portable.zip` and `SHA256SUMS.txt`. A manual run without a tag is a test
+  build (zips kept as a run artifact).
+- **`.github/workflows/winget.yml`:** gated to the upstream repository, so fork
+  releases don't try to publish to WinGet as `Klocman.BulkCrapUninstaller`.
+
 ---
 
 ## Known TODOs / not-yet-done
@@ -139,12 +188,10 @@ Milestone `cli.1.1` is complete (#10–#15); shipped in `v6.2.0-cli.1.1`.
   excluded from `dotnet`/Core MSBuild builds (COM reference, MSB4803). Build with
   Framework MSBuild (`msbuild.exe`, as `publish.bat` does) to include it.
   The other five helpers build under both toolchains.
-- **Reproducible packaging script** — the v6.1.0-cli.1 portable zip was produced
-  with ad-hoc publish commands. A committed `build-release.ps1` (self-contained
-  publish of the .NET projects, stage license/docs/alias/read-me, zip) would make
-  releases repeatable.
-- **Native launcher / multi-arch** — `BCU-launcher` (C++) is skipped (no v143
-  toolset here). To ship the upstream-style multi-arch portable (one
+- ~~Reproducible packaging script~~ — done: `.github/workflows/release.yml` (§8).
+- **Native launcher / multi-arch** — now built by the release workflow on
+  GitHub's windows-2022 runner (it has the v143 toolset). Locally, `BCU-launcher`
+  (C++) was skipped (no v143 toolset). To ship the upstream-style multi-arch portable (one
   `BCUninstaller.exe` launcher + `win-x64`/`win-arm64` subfolders), install the
   VS C++ workload and run the full `publish.bat` flow.
 - **Self-contained _single-file_ `bcu.exe`** is still not wired up. The shipped
@@ -169,6 +216,8 @@ git merge upstream/master        # or: git rebase upstream/master
 
 | Commit | Description |
 |--------|-------------|
+| *(cli.2)* | CLI: full GUI parity (msi, uninstall-dir, target, notes, restore points, reg backup, presets, related apps, …) + RMM JSON results + exit code 9 |
+| `6d748a62` | **Sync to upstream v6.3** — merged `BCUninstaller/master` `30da6093`; conflict in BCU-console/Program.cs (kept fork CLI) |
 | `v6.2.0-cli.1.1` | **Release** — cleanup-subsystem hardening (milestone cli.1.1, #10–#15) |
 | `a6f3f7e7` | cleanup (cli.1.1): shared JunkService, accurate deletes, backup, --format, TUI junk |
 | `v6.2.0-cli.1` | **Release** (#9) — portable self-contained win-x64 bundle (GUI + CLI + 6 helpers) on Forgejo |
@@ -193,6 +242,7 @@ git merge upstream/master        # or: git rebase upstream/master
 
 > When you add a fork-specific change: update the relevant section above and add
 > a row here. The current upstream sync point is **v6.2** (`51d6ca77`, merged in
-> `c6e488f0`); use `git fetch upstream && git merge upstream/master` to go further.
+> `c6e488f0`); **now v6.3** (`30da6093`, merged in `6d748a62`). Use
+> `git fetch upstream && git merge upstream/master` to go further.
 > Likely conflict files on the next sync: the two we patch — `FastSizeGenerator.cs`
 > and `PremadeDialogs.cs` — plus anything touching `source/BCU-console/*`.

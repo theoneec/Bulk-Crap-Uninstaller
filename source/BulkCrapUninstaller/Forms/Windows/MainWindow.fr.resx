@@ -591,4 +591,13 @@
   <data name="autosizeAllColumnsToolStripMenuItem.Text" xml:space="preserve">
     <value>Redimensionner auto toutes les colonnes</value>
   </data>
+  <data name="olvColumnCertificate.Text" xml:space="preserve">
+    <value>Certificat</value>
+  </data>
+  <data name="olvColumnIntegrity.Text" xml:space="preserve">
+    <value>Intégrité</value>
+  </data>
+  <data name="viewInvalidToolStripMenuItem.Text" xml:space="preserve">
+    <value>Voir les Invalides</value>
+  </data>
 </root>

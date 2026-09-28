@@ -90,10 +90,24 @@ try
         Command.DeleteEntry => EntryActions.RunDeleteEntry(cliArgs),
         Command.Startup     => StartupCommands.Run(cliArgs),
         Command.Info        => EntryActions.RunInfo(cliArgs),
-        Command.Junk        => RunJunk(cliArgs),
+        Command.Junk        => JunkCommands.Run(cliArgs),
         Command.ImportList  => Exporters.RunImportList(cliArgs),
         Command.Serve       => ServeCommand.Run(cliArgs),
         Command.Tui         => TuiCommand.Run(cliArgs),
+        Command.Notes       => NotesCommands.Run(cliArgs),
+        Command.Msi         => GuiParityCommands.RunMsi(cliArgs),
+        Command.UninstallDir=> GuiParityCommands.RunUninstallDir(cliArgs),
+        Command.Target      => GuiParityCommands.RunTarget(cliArgs),
+        Command.ManualUninstall   => JunkCommands.RunManualUninstall(cliArgs),
+        Command.CleanProgramFiles => JunkCommands.RunCleanProgramFiles(cliArgs),
+        Command.RestorePoint=> GuiParityCommands.RunRestorePoint(cliArgs),
+        Command.RegBackup   => GuiParityCommands.RunRegBackup(cliArgs),
+        Command.Open        => GuiParityCommands.RunOpen(cliArgs),
+        Command.SearchOnline=> GuiParityCommands.RunSearchOnline(cliArgs),
+        Command.Run         => GuiParityCommands.RunRun(cliArgs),
+        Command.TakeOwnership => GuiParityCommands.RunTakeOwnership(cliArgs),
+        Command.MakeList    => GuiParityCommands.RunMakeList(cliArgs),
+        Command.Tools       => GuiParityCommands.RunTools(cliArgs),
         _                   => RunList(cliArgs)
     };
 }
@@ -186,17 +200,23 @@ static int RunUninstall(CliArgs args)
         return ExitCodes.BadUsage;
     }
 
-    if (string.IsNullOrWhiteSpace(args.TargetName)
-        && string.IsNullOrWhiteSpace(args.TargetRegistryPath)
-        && string.IsNullOrWhiteSpace(args.TargetRatingId))
+    if (!Engine.HasTarget(args))
     {
-        Console.Error.WriteLine("Usage: bcu uninstall <name>|<list.bcul>|--registry-path <path>|--rating-id <id> [--exact] [--quiet-uninstall] [--safe-mode] [--yes] [--junk] [--junk-level <level>] [--dry-run]");
+        Console.Error.WriteLine("Usage: bcu uninstall <name>|<list.bcul>|--registry-path <path>|--rating-id <id>|--msi-guid <guid> [--exact] [--quiet-uninstall] [--safe-mode] [--yes] [--junk] [--junk-level <level>] [--dry-run]");
         return ExitCodes.BadUsage;
     }
 
     var all = Engine.ScanWithBanner(args);
     var entry = Engine.ResolveSingle(all, args);
     if (entry == null) return ExitCodes.NotFound;
+
+    // Related entries (GUI wizard) and machine-readable results (RMM) go through the bulk
+    // executor, which supports both; --quiet-uninstall maps to its prefer-quiet option.
+    if (args.WithRelated || args.Format == OutputFormat.Json)
+    {
+        args.PreferQuiet |= args.UseQuietUninstall;
+        return BulkUninstall.RunForEntries(args, new List<ApplicationUninstallerEntry> { entry }, all);
+    }
 
     Console.WriteLine($"Found:    {entry.DisplayName}");
     Console.WriteLine($"Version:  {entry.DisplayVersion ?? "(unknown)"}");
@@ -212,24 +232,29 @@ static int RunUninstall(CliArgs args)
         return ExitCodes.Success;
     }
 
-    Console.WriteLine("\nUninstalling...");
+    if (!UninstallSupport.Before(new[] { entry }, args, doNotKillSteam: !args.UseQuietUninstall))
+        return ExitCodes.Error;
+
+    Console.WriteLine(args.Simulate ? "\nUninstalling (simulated)..." : "\nUninstalling...");
     try
     {
-        var proc = entry.RunUninstaller(args.UseQuietUninstall, false, args.SafeMode);
+        var proc = entry.RunUninstaller(args.UseQuietUninstall, args.Simulate, args.SafeMode);
         proc?.WaitForExit();
         var code = proc?.ExitCode ?? 0;
         Console.WriteLine(code == 0 ? "Uninstall completed." : $"Uninstaller exited with code {code}.");
+
+        JunkCommands.CleanupAfterUninstall(entry, all, args, code);
+        return ExitCodes.FromUninstaller(code);
     }
     catch (Exception ex)
     {
         Console.Error.WriteLine($"Uninstall error: {ex.Message}");
         return ExitCodes.Error;
     }
-
-    if (args.RunJunk)
-        PresentAndCleanJunk(ScanJunkForEntries(new[] { entry }, all, args), args);
-
-    return ExitCodes.Success;
+    finally
+    {
+        UninstallSupport.After(args);
+    }
 }
 
 // ───────────────────────────────────────────────────────────────────────────────
@@ -272,143 +297,7 @@ static int RunListUninstall(UninstallList list, CliArgs args)
 
     Console.WriteLine($"Uninstall list matched {entries.Count} installed application(s).");
     // Reuse the by-name bulk executor: same plan/dry-run/--yes safety model.
-    return BulkUninstall.RunForEntries(args, entries);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// JUNK
-// ═══════════════════════════════════════════════════════════════════════════════
-
-static int RunJunk(CliArgs args)
-{
-    var all = Engine.ScanWithBanner(args);
-    List<IJunkResult> junk;
-
-    if (!string.IsNullOrWhiteSpace(args.TargetName))
-    {
-        var targets = Engine.FindByName(all, args.TargetName, args.ExactMatch);
-        if (targets.Count == 0)
-        {
-            Console.Error.WriteLine($"No application found matching \"{args.TargetName}\".");
-            return ExitCodes.NotFound;
-        }
-        junk = ScanJunkForEntries(targets, all, args);
-    }
-    else
-    {
-        if (!args.Quiet) Console.Error.WriteLine("Scanning for orphaned program files across all installed apps...");
-        junk = JunkService.ScanOrphans(all, args.JunkLevel);
-    }
-
-    return PresentAndCleanJunk(junk, args);
-}
-
-// Used by both `bcu junk <name>` and `bcu uninstall --junk`.
-static List<IJunkResult> ScanJunkForEntries(
-    IEnumerable<ApplicationUninstallerEntry> targets,
-    ICollection<ApplicationUninstallerEntry> all,
-    CliArgs args)
-{
-    if (!args.Quiet) Console.Error.WriteLine("Scanning for leftover junk...");
-    var junk = JunkService.Scan(targets, all, args.JunkLevel, args.Quiet ? null
-        : msg => Console.Error.Write($"\r  {msg,-60}"));
-    if (!args.Quiet) Console.Error.WriteLine();
-    return junk;
-}
-
-static int PresentAndCleanJunk(List<IJunkResult> junk, CliArgs args)
-{
-    var machine = args.Format is OutputFormat.Json or OutputFormat.Csv;
-
-    if (junk.Count == 0)
-    {
-        if (machine) WriteJunkOutput(junk, args, null);
-        else Console.WriteLine("No junk found above the confidence threshold.");
-        return ExitCodes.Success;
-    }
-
-    if (!args.WillExecute)
-    {
-        // Preview (dry-run). Machine formats emit the full list (for RMM review); text groups by confidence.
-        if (machine)
-        {
-            WriteJunkOutput(junk, args, null);
-        }
-        else
-        {
-            Console.WriteLine($"\nFound {junk.Count} junk item(s):\n");
-            foreach (var level in new[] { ConfidenceLevel.VeryGood, ConfidenceLevel.Good, ConfidenceLevel.Questionable, ConfidenceLevel.Bad, ConfidenceLevel.Unknown })
-            {
-                var group = junk.Where(j => j.Confidence.GetConfidence() == level).ToList();
-                if (group.Count == 0) continue;
-                Console.WriteLine($"  [{level}]");
-                foreach (var j in group)
-                    Console.WriteLine($"    {j.Source?.CategoryName ?? "?"} — {j.GetDisplayName()}");
-            }
-            Console.WriteLine($"\nDRY RUN: re-run with --yes to delete the above {junk.Count} item(s)"
-                + (args.BackupDir != null ? $" (backing up to {args.BackupDir} first)." : ". Files go to the Recycle Bin; registry/other are permanent."));
-        }
-        return ExitCodes.Success;
-    }
-
-    if (!machine) Console.WriteLine(args.BackupDir != null ? $"Cleaning junk (backup -> {args.BackupDir})..." : "Cleaning junk...");
-    var res = JunkService.Clean(junk, args.BackupDir, (j, ok, err) =>
-    {
-        if (!machine && !ok) Console.Error.WriteLine($"  Failed: [{j.GetDisplayName()}] — {err}");
-    });
-
-    WriteJunkOutput(junk, args, res);
-    if (!machine)
-        Console.WriteLine($"Done. Deleted: {res.Deleted}  Failed: {res.Failed}"
-            + (args.BackupDir != null ? $"  BackedUp: {res.BackedUp}" : ""));
-    return res.Failed > 0 ? ExitCodes.PartialFailure : ExitCodes.Success;
-}
-
-// Machine-readable (json/csv) junk output, honouring --output. res==null => preview only.
-static void WriteJunkOutput(List<IJunkResult> junk, CliArgs args, JunkCleanResult? res)
-{
-    if (args.Format is not (OutputFormat.Json or OutputFormat.Csv)) return;
-
-    string? ErrOf(IJunkResult j) => res?.Items.FirstOrDefault(i => ReferenceEquals(i.Item, j)).Error;
-    bool? DelOf(IJunkResult j) => res == null ? null : ErrOf(j) == null;
-
-    using var output = Output.OpenOutput(args);
-    var w = output ?? Console.Out;
-
-    if (args.Format == OutputFormat.Json)
-    {
-        var payload = new
-        {
-            count = junk.Count,
-            executed = res != null,
-            deleted = res?.Deleted,
-            failed = res?.Failed,
-            backedUp = res?.BackedUp,
-            items = junk.Select(j => new
-            {
-                category = j.Source?.CategoryName,
-                name = j.GetDisplayName(),
-                confidence = j.Confidence.GetConfidence().ToString(),
-                application = j.Application?.DisplayName,
-                deleted = DelOf(j),
-                error = ErrOf(j)
-            })
-        };
-        w.WriteLine(JsonSerializer.Serialize(payload,
-            new JsonSerializerOptions { WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull }));
-    }
-    else // Csv
-    {
-        w.WriteLine("confidence,category,application,name,deleted,error");
-        foreach (var j in junk)
-        {
-            string C(string? s) => "\"" + (s ?? "").Replace("\"", "\"\"") + "\"";
-            w.WriteLine(string.Join(",",
-                C(j.Confidence.GetConfidence().ToString()), C(j.Source?.CategoryName),
-                C(j.Application?.DisplayName), C(j.GetDisplayName()),
-                C(DelOf(j)?.ToString()), C(ErrOf(j))));
-        }
-    }
+    return BulkUninstall.RunForEntries(args, entries, all);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -424,7 +313,7 @@ static int RunHelp()
 
         SAFETY MODEL
           State-changing commands (uninstall, bulk, repair, modify, rename,
-          delete-entry, startup enable/disable, junk) run ONLY with --yes.
+          delete-entry, startup changes, junk, msi, notes set, ...) run ONLY with --yes.
           Without --yes (or with --dry-run) they print what they WOULD do and
           change nothing.
 
@@ -446,9 +335,27 @@ static int RunHelp()
           bcu tui                              Interactive full-screen terminal UI (arrows/space)
           bcu help                             Show this help
 
+        MORE COMMANDS (GUI parity)
+          bcu msi <target> [--mode configure|uninstall|quiet]   Run msiexec /I, /X or /qb /X
+          bcu uninstall-dir <directory>        Uninstall whatever is installed in a folder
+          bcu target <pid|process|file|dir>    Which app owns this? (+ --uninstall to remove it)
+          bcu manual-uninstall <name...>       Remove leftovers + registry entry, no uninstaller
+          bcu clean-program-files              Remove orphaned Program Files folders
+          bcu notes list|get|set|clear [<target>] [<text>]      Custom notes (shared with GUI)
+          bcu restore-point [<description>]    Create a System Restore point
+          bcu reg-backup <name...> -o f.reg    Export the uninstall registry keys to a .reg file
+          bcu make-list <name...> -o f.bcul [--exclude] [--append]  Build a .bcul uninstall list
+          bcu open <target> [--what install|uninstaller|source|web|registry] [--launch]
+          bcu search-online <target> [--site google|alternativeto|slant|fosshub|sourceforge|filehippo|github]
+          bcu run <target> [--index N]         List / launch the app's executables  (interactive)
+          bcu take-ownership <target>          takeown + icacls on the app's folders
+          bcu tools netfx3|features|disk-cleanup|troubleshoot|programs-and-features|system-restore
+                                    netfx3 and features work headless; the rest open windows
+
         LIST / EXPORT OPTIONS
-          --format table|json|csv|xml|bat|ps1  Output format
-                                    (xml = native BCU list; bat/ps1 = uninstall scripts)
+          --format table|json|csv|xml|bat|ps1|store-ps1  Output format
+                                    (xml = native BCU list; bat/ps1 = uninstall scripts;
+                                     store-ps1 = Remove-AppxPackage script for Store apps)
           --filter <text>           Filter by name or publisher
           --sort name|publisher|date|size|source  (default: name)
           --wide                    Show more columns (type, date, size)
@@ -457,6 +364,13 @@ static int RunHelp()
           --updates                 Include Windows Updates
           --orphaned                Include orphaned entries
           --all                     Include system + updates + orphaned
+          --preset <p>              GUI view preset: basic|advanced|everything|system|startup|
+                                    browsers|tweaks|orphaned|updates|invalid|features|store|protected
+          --kind <t[,t]>            Only these uninstaller types (Msiexec,Nsis,InnoSetup,StoreApp,
+                                    Steam,WindowsFeature,WindowsUpdate,Chocolatey,Scoop,...)
+          --hide-microsoft          Hide entries published by Microsoft
+          --invalid                 Only entries whose uninstaller is missing/invalid
+          --list <file.bcul>        Only entries matched by a saved uninstall list
           --output <file>, -o       Write output to file (required for --format xml)
           --quiet, -q               Suppress progress text
           --json-errors             Emit machine-readable errors
@@ -469,6 +383,14 @@ static int RunHelp()
                                     Skip a specific source
           --source-timeout <secs>   Max seconds to wait for any detection helper EXE
                                     before killing it (default 120; 0 = no timeout)
+          --no-predefined           Skip predefined templates / tweaks
+          --custom-folders "a;b"    Extra program folders to scan (with --drives)
+          --no-folder-autodetect    Don't auto-detect custom Program Files folders
+          --scan-removable          Also scan removable drives
+          --quiet-automation        Automate loud uninstallers into quiet ones (UninstallerAutomatizer)
+          --quiet-automation-kill-stuck   ...and kill them if they get stuck
+          --use-daemon              Use the bulk quiet-uninstall daemon
+          --cache                   Use/refresh the app info cache (InfoCache.xml)
 
         EXECUTION CONTEXT
           --run-as system|active-user   Intended context hint for RMM agents
@@ -476,6 +398,7 @@ static int RunHelp()
         UNINSTALL OPTIONS
           --registry-path <path>    Target by registry uninstall key path
           --rating-id <id>          Target by BCU rating id
+          --msi-guid <guid>         Target by MSI product code
           --exact                   Exact name match only (default: partial)
           --quiet-uninstall         Use quiet/silent uninstaller if available
           --safe-mode               Don't modify the uninstall command (NSIS fix off)
@@ -483,6 +406,14 @@ static int RunHelp()
           --dry-run                 Force dry-run even with --yes
           --junk                    Also clean leftover junk after uninstall
           --junk-level <level>      VeryGood|Good|Questionable|Bad|Unknown (default Good)
+          --simulate                Engine-level simulation (runs nothing, reports as if it had)
+          --with-related            Also uninstall related entries (same app family / folder)
+          --close-apps              Kill processes running from the app's folders first
+          --restore-point           Create a System Restore point before uninstalling
+          --reg-backup <file.reg>   Export the targets' registry keys first (abort if it fails)
+          --pre-command <cmd>       Run before uninstalling (repeatable)
+          --post-command <cmd>      Run after uninstalling (repeatable)
+          --format json             Machine-readable plan/result on stdout (for RMM)
 
         JUNK OPTIONS  (bcu junk [<name>])
           --junk-level <level>      Minimum confidence to act on (default Good)
@@ -504,12 +435,23 @@ static int RunHelp()
           --retry-failed            Retry failed quiet uninstalls loudly
           --ignore-protected        Include protected entries (default: skip them)
           --no-loud-limit           Allow multiple visible uninstallers at once
+          --no-intelligent-sort     Run in name order (default: GUI's intelligent ordering)
+          --junk                    Clean leftovers of everything that was removed
           --yes                     Execute (otherwise dry-run lists the targets)
 
         STARTUP OPTIONS
           bcu startup list [--format json]
           bcu startup disable <match> [--yes]
           bcu startup enable  <match> [--yes]
+          bcu startup delete  <match> [--yes]
+          bcu startup backup  <match> <directory> [--yes]
+          bcu startup all-users|current-user|move-to-registry <match> [--yes]
+          --type normal|task|service|browser   Restrict to one kind of startup entry
+
+        EXIT CODES
+          0 success   1 error   2 bad usage   3 not found   4 partial failure
+          5 needs elevation   6 needs user session   7 timeout   8 cancelled
+          9 success, reboot required (msiexec 3010/1641)
 
         EXAMPLES
           bcu list --format json --quiet
@@ -525,6 +467,14 @@ static int RunHelp()
           bcu startup disable Spotify --yes
           bcu info "Visual Studio Code"
           bcu junk "Discord" --junk-level VeryGood --yes
+
+        RMM EXAMPLES  (run as SYSTEM; parse stdout, branch on exit code)
+          bcu list --rmm-safe --format json --quiet
+          bcu uninstall "7-Zip" --quiet-uninstall --format json --quiet --yes
+          bcu bulk "Toolbar" "Coupon" --prefer-quiet --auto-kill-stuck --close-apps --junk --format json --yes
+          bcu msi --msi-guid {23170F69-40C1-2702-2301-000001000000} --mode quiet --yes
+          bcu uninstall-dir "C:\Program Files\OldApp" --yes
+          bcu list --preset startup --format csv -o startup-apps.csv
         """);
     return ExitCodes.Success;
 }

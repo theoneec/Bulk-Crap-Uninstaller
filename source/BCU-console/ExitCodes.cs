@@ -47,4 +47,23 @@ public static class ExitCodes
 
     /// <summary>Cancelled by the user (e.g. Ctrl+C).</summary>
     public const int Cancelled = 8;
+
+    /// <summary>
+    /// The uninstaller/msiexec succeeded but asked for a reboot (Windows Installer 3010 /
+    /// 1641). RMM scripts can use this to schedule a restart.
+    /// </summary>
+    public const int RebootRequired = 9;
+
+    /// <summary>
+    /// Map an uninstaller's own exit code onto this table, so raw codes (which can collide
+    /// with ours, e.g. msiexec returning 3 or 4) never leak out as the CLI's exit code.
+    /// The raw code is still printed.
+    /// </summary>
+    public static int FromUninstaller(int code) => code switch
+    {
+        0 => Success,
+        3010 or 1641 => RebootRequired,
+        1602 or 1223 => Cancelled,        // ERROR_INSTALL_USEREXIT / ERROR_CANCELLED
+        _ => Error
+    };
 }

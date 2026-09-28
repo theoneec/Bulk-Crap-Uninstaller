@@ -43,6 +43,13 @@ public class AppRecord
         QuietUninstallPossible = e.QuietUninstallPossible ? true : null;
         SourceKind          = e.UninstallerKind.ToString();
         HasStartup          = e.StartupEntries != null && e.StartupEntries.Any() ? true : null;
+        CustomNote          = string.IsNullOrEmpty(e.CustomNote) ? null : e.CustomNote;
+        IsInvalid           = e.IsValid ? null : true;
+        IsTweak             = e.IsScriptTweak ? true : null;
+        IsWebBrowser        = e.IsWebBrowser ? true : null;
+        MsiProductCode      = e.BundleProviderKey != Guid.Empty ? e.BundleProviderKey.ToString("B").ToUpperInvariant() : null;
+        UninstallerLocation = string.IsNullOrEmpty(e.UninstallerLocation) ? null : e.UninstallerLocation;
+        InstallSource       = string.IsNullOrEmpty(e.InstallSource) ? null : e.InstallSource;
 
         if (verifyCerts)
         {
@@ -125,6 +132,34 @@ public class AppRecord
     [JsonPropertyName("hasStartup")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? HasStartup { get; set; }
+
+    [JsonPropertyName("isInvalid")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsInvalid { get; set; }
+
+    [JsonPropertyName("isTweak")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsTweak { get; set; }
+
+    [JsonPropertyName("isWebBrowser")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsWebBrowser { get; set; }
+
+    [JsonPropertyName("msiProductCode")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? MsiProductCode { get; set; }
+
+    [JsonPropertyName("uninstallerLocation")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? UninstallerLocation { get; set; }
+
+    [JsonPropertyName("installSource")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? InstallSource { get; set; }
+
+    [JsonPropertyName("customNote")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CustomNote { get; set; }
 
     [JsonPropertyName("signed")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
