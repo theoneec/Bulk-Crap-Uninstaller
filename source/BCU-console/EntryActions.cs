@@ -30,9 +30,7 @@ public static class EntryActions
 
     private static int RunModifyOrRepair(CliArgs args, string verb)
     {
-        if (string.IsNullOrWhiteSpace(args.TargetName) &&
-            string.IsNullOrWhiteSpace(args.TargetRegistryPath) &&
-            string.IsNullOrWhiteSpace(args.TargetRatingId))
+        if (!Engine.HasTarget(args))
         {
             Console.Error.WriteLine($"Usage: bcu {verb.ToLowerInvariant()} <name>|--registry-path <path> [--yes]");
             return ExitCodes.BadUsage;
@@ -70,7 +68,7 @@ public static class EntryActions
                 ? entry.UninstallUsingMsi(MsiUninstallModes.InstallModify, false)
                 : entry.Modify(false);
             Console.WriteLine(code == 0 ? $"{verb} completed (exit 0)." : $"{verb} process exited with code {code}.");
-            return code == 0 ? 0 : code;
+            return ExitCodes.FromUninstaller(code);
         }
         catch (Exception ex)
         {
@@ -130,9 +128,7 @@ public static class EntryActions
     // ── Delete registry entry only (no uninstall) ────────────────────────────────
     public static int RunDeleteEntry(CliArgs args)
     {
-        if (string.IsNullOrWhiteSpace(args.TargetName) &&
-            string.IsNullOrWhiteSpace(args.TargetRegistryPath) &&
-            string.IsNullOrWhiteSpace(args.TargetRatingId))
+        if (!Engine.HasTarget(args))
         {
             Console.Error.WriteLine("Usage: bcu delete-entry <name>|--registry-path <path> [--yes]");
             return ExitCodes.BadUsage;
@@ -176,9 +172,7 @@ public static class EntryActions
     // ── Info / properties dump ────────────────────────────────────────────────────
     public static int RunInfo(CliArgs args)
     {
-        if (string.IsNullOrWhiteSpace(args.TargetName) &&
-            string.IsNullOrWhiteSpace(args.TargetRegistryPath) &&
-            string.IsNullOrWhiteSpace(args.TargetRatingId))
+        if (!Engine.HasTarget(args))
         {
             Console.Error.WriteLine("Usage: bcu info <name>|--registry-path <path>");
             return ExitCodes.BadUsage;

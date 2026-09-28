@@ -13,10 +13,13 @@ namespace BcuCli;
 public enum Command
 {
     List, Export, Uninstall, Junk, Help,
-    Bulk, Repair, Modify, Rename, DeleteEntry, Startup, Info, ImportList, Serve, Tui
+    Bulk, Repair, Modify, Rename, DeleteEntry, Startup, Info, ImportList, Serve, Tui,
+    // GUI-parity additions
+    Notes, Msi, UninstallDir, Target, ManualUninstall, CleanProgramFiles, RestorePoint,
+    RegBackup, Open, SearchOnline, Run, TakeOwnership, MakeList, Tools
 }
 
-public enum OutputFormat { Table, Json, Csv, Xml, Bat, Ps1 }
+public enum OutputFormat { Table, Json, Csv, Xml, Bat, Ps1, StorePs1 }
 public enum RunAsMode { System, ActiveUser }
 
 public class CliArgs
@@ -62,8 +65,17 @@ public class CliArgs
     public string?         TargetRegistryPath { get; set; }
     public string?         TargetRatingId   { get; set; }
     public string?         NewName          { get; set; }       // rename: second positional
-    public string?         StartupAction    { get; set; }       // startup: list|enable|disable
     public string?         ImportFile       { get; set; }       // import-list: path
+    public string?         TargetMsiGuid    { get; set; }       // --msi-guid: target by MSI product code
+
+    /// <summary>First positional of sub-command style commands (startup/notes/tools/...).</summary>
+    public string?         SubAction        { get; set; }
+    /// <summary>Extra free-text positional (notes set: text, restore-point: description, target: what).</summary>
+    public string?         Value            { get; set; }
+    public List<string>    Positionals      { get; } = new();
+
+    /// <summary>Backwards-compatible name for <see cref="SubAction"/> as used by `startup`.</summary>
+    public string?         StartupAction    { get => SubAction; set => SubAction = value; }
     public bool            ExactMatch       { get; set; }
     public bool            UseQuietUninstall{ get; set; }
     public bool            Yes              { get; set; }
@@ -80,6 +92,42 @@ public class CliArgs
     public bool IgnoreProtected { get; set; }
     public bool NoLoudLimit     { get; set; }
     public bool SafeMode        { get; set; }
+    public bool Simulate        { get; set; }       // --simulate: run the engine's own simulated uninstall
+    public bool IntelligentSort { get; set; } = true;   // GUI default: AdvancedIntelligentUninstallerSorting
+    public bool WithRelated     { get; set; }       // add related entries (GUI wizard "related apps")
+    public bool RestorePoint    { get; set; }       // create a system restore point first
+    public bool CloseApps       { get; set; }       // kill processes running from the target's folders
+    public string? RegBackupFile { get; set; }      // export target registry keys to .reg before changing them
+    public List<string> PreCommands  { get; } = new();
+    public List<string> PostCommands { get; } = new();
+
+    // ── Scan tuning (GUI Settings > Folders / Quiet / Cache) ─────────────────────
+    public bool ScanPreDefined        { get; set; } = true;
+    public bool? AutoDetectFolders    { get; set; }
+    public bool ScanRemovable         { get; set; }
+    public string[]? CustomFolders    { get; set; }
+    public bool QuietAutomation       { get; set; }
+    public bool QuietAutomationKill   { get; set; }
+    public bool UseQuietDaemon        { get; set; }
+    public bool UseInfoCache          { get; set; }
+
+    // ── View / filtering (GUI sidebar + View menu presets) ───────────────────────
+    public string?      Preset        { get; set; }
+    public bool         HideMicrosoft { get; set; }
+    public bool         OnlyInvalid   { get; set; }
+    public List<string> Kinds         { get; } = new();    // --kind Msiexec,StoreApp,...
+    public string?      ListFile      { get; set; }        // --list <file.bcul>: filter through a saved uninstall list
+
+    // ── Misc command options ─────────────────────────────────────────────────────
+    public string? What      { get; set; }   // open --what install|uninstaller|source|web|registry
+    public string? Site      { get; set; }   // search-online --site google|github|...
+    public string? MsiMode   { get; set; }   // msi --mode configure|uninstall|quiet
+    public bool    Launch    { get; set; }   // open/search-online: shell-open instead of printing
+    public int?    Index     { get; set; }   // run --index N
+    public bool    Exclude   { get; set; }   // make-list --exclude
+    public bool    Append    { get; set; }   // make-list --append
+    public bool    DoUninstall { get; set; } // target --uninstall
+    public string? StartupType { get; set; } // startup --type normal|task|service|browser
 
     /// <summary>
     /// True only when a destructive operation should really run.
@@ -113,6 +161,31 @@ public class CliArgs
             case "serve":       a.Command = Command.Serve;       i = 1; break;
             case "tui": case "ui": case "interactive":
                                 a.Command = Command.Tui;         i = 1; break;
+            case "notes": case "note":
+                                a.Command = Command.Notes;       i = 1; break;
+            case "msi": case "msiexec":
+                                a.Command = Command.Msi;         i = 1; break;
+            case "uninstall-dir": case "uninstall-from-directory":
+                                a.Command = Command.UninstallDir; i = 1; break;
+            case "target": case "find-owner":
+                                a.Command = Command.Target;      i = 1; break;
+            case "manual-uninstall": case "leftovers":
+                                a.Command = Command.ManualUninstall; i = 1; break;
+            case "clean-program-files": case "orphans":
+                                a.Command = Command.CleanProgramFiles; i = 1; break;
+            case "restore-point":
+                                a.Command = Command.RestorePoint; i = 1; break;
+            case "reg-backup":  a.Command = Command.RegBackup;   i = 1; break;
+            case "open": case "locate":
+                                a.Command = Command.Open;        i = 1; break;
+            case "search-online": case "search":
+                                a.Command = Command.SearchOnline; i = 1; break;
+            case "run":         a.Command = Command.Run;         i = 1; break;
+            case "take-ownership": case "takeown":
+                                a.Command = Command.TakeOwnership; i = 1; break;
+            case "make-list":   a.Command = Command.MakeList;    i = 1; break;
+            case "tools": case "tool":
+                                a.Command = Command.Tools;       i = 1; break;
             case "help": case "--help": case "-h": case "/?":
                 a.Command = Command.Help; return a;
         }
@@ -154,6 +227,7 @@ public class CliArgs
                             "xml"  => OutputFormat.Xml,
                             "bat"  => OutputFormat.Bat,
                             "ps1" or "powershell" => OutputFormat.Ps1,
+                            "store-ps1" or "storeps1" => OutputFormat.StorePs1,
                             _      => OutputFormat.Table
                         };
                     break;
@@ -226,7 +300,70 @@ public class CliArgs
                 case "--no-features": a.ScanFeatures = false; break;
                 case "--no-updates":  a.ScanUpdates  = false; break;
 
+                // Scan tuning
+                case "--no-predefined":       a.ScanPreDefined = false; break;
+                case "--no-folder-autodetect":a.AutoDetectFolders = false; break;
+                case "--folder-autodetect":   a.AutoDetectFolders = true; break;
+                case "--scan-removable":      a.ScanRemovable = true; break;
+                case "--custom-folders":
+                    if (i + 1 < raw.Length)
+                        a.CustomFolders = raw[++i].Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                            .Select(x => x.Trim('"')).ToArray();
+                    break;
+                case "--quiet-automation":    a.QuietAutomation = true; break;
+                case "--quiet-automation-kill-stuck": a.QuietAutomation = a.QuietAutomationKill = true; break;
+                case "--use-daemon":          a.UseQuietDaemon = true; break;
+                case "--cache":               a.UseInfoCache = true; break;
+
+                // View / filtering
+                case "--preset": case "--view":
+                    if (i + 1 < raw.Length) a.Preset = raw[++i].ToLowerInvariant();
+                    break;
+                case "--hide-microsoft": a.HideMicrosoft = true; break;
+                case "--invalid":        a.OnlyInvalid = true; break;
+                case "--kind":
+                    if (i + 1 < raw.Length)
+                        a.Kinds.AddRange(raw[++i].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+                    break;
+                case "--list":
+                    if (i + 1 < raw.Length) a.ListFile = raw[++i];
+                    break;
+
+                // Misc command options
+                case "--what":  if (i + 1 < raw.Length) a.What = raw[++i].ToLowerInvariant(); break;
+                case "--site":  if (i + 1 < raw.Length) a.Site = raw[++i].ToLowerInvariant(); break;
+                case "--mode":  if (i + 1 < raw.Length) a.MsiMode = raw[++i].ToLowerInvariant(); break;
+                case "--type":  if (i + 1 < raw.Length) a.StartupType = raw[++i].ToLowerInvariant(); break;
+                case "--index":
+                    if (i + 1 < raw.Length && int.TryParse(raw[++i], out var idx)) a.Index = idx;
+                    break;
+                case "--launch": a.Launch  = true; break;
+                case "--exclude":a.Exclude = true; break;
+                case "--append": a.Append  = true; break;
+                case "--uninstall": a.DoUninstall = true; break;
+                case "--description": case "--text":
+                    if (i + 1 < raw.Length) a.Value = raw[++i];
+                    break;
+
                 // Targeting / uninstall
+                case "--msi-guid": case "--product-code":
+                    if (i + 1 < raw.Length) a.TargetMsiGuid = raw[++i];
+                    break;
+                case "--simulate":        a.Simulate          = true; break;
+                case "--no-intelligent-sort": a.IntelligentSort = false; break;
+                case "--intelligent-sort":    a.IntelligentSort = true;  break;
+                case "--with-related":    a.WithRelated       = true; break;
+                case "--restore-point":   a.RestorePoint      = true; break;
+                case "--close-apps":      a.CloseApps         = true; break;
+                case "--reg-backup":
+                    if (i + 1 < raw.Length) a.RegBackupFile = raw[++i];
+                    break;
+                case "--pre-command":
+                    if (i + 1 < raw.Length) a.PreCommands.Add(raw[++i]);
+                    break;
+                case "--post-command":
+                    if (i + 1 < raw.Length) a.PostCommands.Add(raw[++i]);
+                    break;
                 case "--exact":           a.ExactMatch        = true; break;
                 case "--yes": case "-y":  a.Yes               = true; break;
                 case "--dry-run":         a.DryRun            = true; break;
@@ -273,10 +410,14 @@ public class CliArgs
     /// <summary>Give positional arguments meaning based on the chosen command.</summary>
     private static void AssignPositionals(CliArgs a, List<string> positionals)
     {
+        a.Positionals.AddRange(positionals);
         switch (a.Command)
         {
             case Command.Uninstall:
             case Command.Bulk:
+            case Command.RegBackup:
+            case Command.MakeList:
+            case Command.ManualUninstall:
                 a.Targets.AddRange(positionals);
                 a.TargetName = positionals.FirstOrDefault();
                 break;
@@ -286,7 +427,31 @@ public class CliArgs
             case Command.Modify:
             case Command.DeleteEntry:
             case Command.Info:
+            case Command.Msi:
+            case Command.Open:
+            case Command.SearchOnline:
+            case Command.Run:
+            case Command.TakeOwnership:
                 a.TargetName = positionals.FirstOrDefault();
+                break;
+
+            case Command.UninstallDir:
+            case Command.Target:
+                a.Value = positionals.FirstOrDefault();
+                break;
+
+            case Command.RestorePoint:
+                a.Value ??= positionals.FirstOrDefault();
+                break;
+
+            case Command.Notes:
+                a.SubAction = positionals.ElementAtOrDefault(0)?.ToLowerInvariant();
+                a.TargetName = positionals.ElementAtOrDefault(1);
+                a.Value ??= positionals.ElementAtOrDefault(2);
+                break;
+
+            case Command.Tools:
+                a.SubAction = positionals.ElementAtOrDefault(0)?.ToLowerInvariant();
                 break;
 
             case Command.Rename:
@@ -295,8 +460,9 @@ public class CliArgs
                 break;
 
             case Command.Startup:
-                a.StartupAction = positionals.ElementAtOrDefault(0)?.ToLowerInvariant();
-                a.TargetName    = positionals.ElementAtOrDefault(1);
+                a.SubAction  = positionals.ElementAtOrDefault(0)?.ToLowerInvariant();
+                a.TargetName = positionals.ElementAtOrDefault(1);
+                a.Value      = positionals.ElementAtOrDefault(2);   // startup backup <match> <dir>
                 break;
 
             case Command.ImportList:

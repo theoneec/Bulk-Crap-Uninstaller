@@ -74,7 +74,10 @@ public static class JunkService
         Action<IJunkResult, bool, string?>? onItem = null)
     {
         var result = new JunkCleanResult();
-        foreach (var j in junk)
+        // GUI order (AppUninstaller.SearchForAndRemoveJunk): run leftover uninstallers first,
+        // then startup entries, then everything else.
+        var ordered = junk.OrderBy(j => j is RunProcessJunk ? 0 : j is StartupJunkNode ? 1 : 2);
+        foreach (var j in ordered)
         {
             Engine.CancelToken.ThrowIfCancellationRequested();
             try

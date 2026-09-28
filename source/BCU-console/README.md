@@ -152,6 +152,93 @@ automation because display names change between versions.
 
 ---
 
+## GUI-parity commands (v6.3.0-cli.2)
+
+These cover the GUI features the earlier CLI lacked. They all follow the same
+safety model: they dry-run unless you pass `--yes`, and none of them ever waits for
+keyboard input, so they're safe under an RMM agent running as SYSTEM.
+
+| Command | GUI feature | Notes |
+|---------|-------------|-------|
+| `bcu msi <target> [--mode configure\|uninstall\|quiet]` | *Uninstall using MsiExec* (`/I`, `/X`, `/qb /X`) | Target by name or `--msi-guid {GUID}` |
+| `bcu uninstall-dir <dir>` | *Uninstall from directory* | Runs any real uninstaller it finds there, then removes the rest as leftovers |
+| `bcu target <pid\|process\|file\|dir> [--uninstall]` | *Target* (uninstall by window, process or file) | Lists the owning apps; `--uninstall` sends them to the bulk flow (quiet) |
+| `bcu manual-uninstall <name...>` | *Manual uninstall* | Removes leftovers and the registry entry without running the uninstaller |
+| `bcu clean-program-files` | *Clean up Program Files* | Orphaned folders (same as `bcu junk` with no name) |
+| `bcu notes list\|get\|set\|clear` | *Custom notes* (upstream v6.3) | Stored in `CustomNotes.xml` next to the exe, shared with the GUI |
+| `bcu restore-point [desc]` | *Create restore point* | Also available as `--restore-point` on uninstall, bulk and msi |
+| `bcu reg-backup <name...> -o f.reg` | *Create registry backup* | Also available as `--reg-backup f.reg`, which aborts the uninstall if the backup fails |
+| `bcu make-list <name...> -o f.bcul` | *Include/Exclude in advanced filters* and save the list | `--exclude`, `--append`; also accepts `--filter` / `--preset` |
+| `bcu open <target> --what install\|uninstaller\|source\|web\|registry` | *Open …* | Prints the path; `--launch` opens it (interactive only) |
+| `bcu search-online <target> --site …` | *Search online* | Prints the URL; `--launch` opens it |
+| `bcu run <target> [--index N]` | *Run* submenu | Interactive only |
+| `bcu take-ownership <target>` | *Take ownership* | `takeown` + `icacls`; needs elevation |
+| `bcu tools netfx3\|features\|disk-cleanup\|troubleshoot\|programs-and-features\|system-restore` | *Tools* menu | `netfx3` and `features` work headless; the rest open windows |
+| `bcu startup delete\|backup\|all-users\|current-user\|move-to-registry` | Startup Manager | `--type normal\|task\|service\|browser` |
+| `bcu export --format store-ps1` | *Export Store apps removal script* | |
+
+**New options on uninstall / bulk / msi / uninstall-dir / manual-uninstall.** They
+replicate the GUI's uninstall wizard and settings:
+
+| Option | GUI equivalent |
+|--------|----------------|
+| `--with-related` | Wizard's related-applications step |
+| `--close-apps` | "Close running applications" dialog: kills processes loaded from the app's folders |
+| `--restore-point` | Settings › *Create restore point* |
+| `--reg-backup <file.reg>` | Registry backup before the change |
+| `--pre-command` / `--post-command <cmd>` (repeatable) | Settings › *External commands* |
+| `--simulate` | Settings › *Simulate* (engine-level dry run) |
+| `--no-intelligent-sort` | Turns off *Intelligent uninstaller sorting* (on by default, like the GUI) |
+| `--junk` on `bulk` | Post-uninstall leftover scan of completed entries |
+| `--format json` | Machine-readable plan/result, one JSON document on stdout (for RMM) |
+
+**New list filters.** They match the GUI's sidebar and View menu: `--preset
+basic|advanced|everything|system|startup|browsers|tweaks|orphaned|updates|invalid|features|store|protected`,
+`--kind Msiexec,Nsis,…`, `--hide-microsoft`, `--invalid`, and `--list <file.bcul>`.
+JSON output also gained `customNote`, `isInvalid`, `isTweak`, `isWebBrowser`,
+`msiProductCode`, `uninstallerLocation` and `installSource`.
+
+**New scan settings.** They match the GUI's Settings › Folders / Quiet / Cache
+pages: `--no-predefined`, `--custom-folders "a;b"`, `--no-folder-autodetect`,
+`--scan-removable`, `--quiet-automation`, `--quiet-automation-kill-stuck`,
+`--use-daemon` and `--cache`.
+
+**Not ported:**
+- User ratings: they talk to BCU's web rating service from GUI-only code.
+- Clipboard copy: use `bcu info` or `--format json` instead.
+- GUI-only settings, the updater and the setup wizard.
+
+### RMM usage (ConnectWise Automate, Datto RMM, …)
+
+RMM agents run scripts as **SYSTEM**, with no desktop and no stdin, and judge
+the result by exit code and output. Recommended pattern:
+
+```bat
+:: Inventory: registry-only, fast, no helper EXEs
+bcu.exe list --rmm-safe --format json --quiet > "%TEMP%\apps.json"
+
+:: Remove an app silently; JSON result on stdout, progress on stderr
+bcu.exe uninstall "7-Zip" --quiet-uninstall --close-apps --junk --format json --quiet --yes
+if %ERRORLEVEL%==9 echo Reboot required
+
+:: Remove several apps with the same engine the GUI uses
+bcu.exe bulk "WildTangent" "McAfee WebAdvisor" --prefer-quiet --auto-kill-stuck --retry-failed ^
+        --restore-point --junk --format json --yes
+
+:: MSI by product code
+bcu.exe msi --msi-guid {23170F69-40C1-2702-2301-000001000000} --mode quiet --yes
+```
+
+- Always pass `--yes` for the change to happen. Without it you get a dry-run plan
+  and exit code 0.
+- Loud (non-quiet) uninstallers can't show a window under SYSTEM. Prefer
+  `--quiet-uninstall` / `--prefer-quiet` and `--auto-kill-stuck`. The `serve`
+  daemon can broker a run into the logged-on user's session (see below).
+- `--launch`, `run`, `tools disk-cleanup` and similar commands open windows, so
+  they are for interactive use only.
+
+---
+
 ## Options
 
 ### List / Export
@@ -295,6 +382,12 @@ catch-all so existing `exit != 0` checks keep working.
 | `6` | NeedsUserSession | Requires an interactive user session — e.g. Store-app or GUI-automated uninstall under SYSTEM/Session 0 *(reserved)* |
 | `7` | Timeout | A source scan or operation exceeded its timeout |
 | `8` | Cancelled | Cancelled by the user (Ctrl+C) |
+| `9` | RebootRequired | The uninstaller/msiexec succeeded but asked for a reboot (3010 / 1641) |
+
+A single `uninstall`, `msi`, `repair` or `modify` maps the uninstaller's own exit
+code onto this table (0 → 0, 3010/1641 → 9, 1602/1223 → 8, anything else → 1), and
+prints the raw code. Earlier builds returned 0 for a single uninstall even when the
+uninstaller failed.
 
 State-changing multi-item commands (`bulk`, `junk`, `startup enable/disable`)
 return `PartialFailure` (4) if **any** item failed, so RMM jobs can distinguish

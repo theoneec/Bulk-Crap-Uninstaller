@@ -53,101 +53,189 @@ public static class BulkUninstall
             return ExitCodes.NotFound;
         }
 
-        return RunForEntries(args, entries);
+        return RunForEntries(args, entries, all);
     }
 
     /// <summary>
     /// Execute a bulk uninstall over an already-resolved set of entries.
-    /// Shared by the by-name <see cref="Run"/> path and the legacy .bcul list path
-    /// (BCU-console back-compat), so both honour the same plan/dry-run/execute flow.
+    /// Shared by the by-name <see cref="Run"/> path, the legacy .bcul list path, `target --uninstall`
+    /// and `uninstall --with-related`, so all honour the same plan/dry-run/execute flow.
+    /// <paramref name="all"/> (the full scan) enables --with-related and the post-uninstall --junk pass.
     /// </summary>
-    public static int RunForEntries(CliArgs args, List<ApplicationUninstallerEntry> entries)
+    public static int RunForEntries(CliArgs args, List<ApplicationUninstallerEntry> entries,
+        IList<ApplicationUninstallerEntry>? all = null)
     {
+        var json = args.Format == OutputFormat.Json;
+        // In JSON mode the human-readable plan goes to stderr so stdout is one parseable document.
+        var plan = json ? Console.Error : Console.Out;
+
         if (entries.Count == 0)
         {
             Console.Error.WriteLine("No applications matched. Nothing to do.");
             return ExitCodes.NotFound;
         }
 
-        // Show the plan.
-        Console.WriteLine($"Targets ({entries.Count}):");
-        foreach (var e in entries.OrderBy(x => x.DisplayName))
+        if (args.WithRelated && all != null)
+        {
+            var related = UninstallSupport.FindRelated(entries, all);
+            if (related.Count > 0)
+            {
+                plan.WriteLine($"Adding {related.Count} related entr(ies): {string.Join(", ", related.Select(r => r.DisplayName))}");
+                entries = entries.Concat(related).ToList();
+            }
+        }
+
+        var taskEntries = entries
+            .Select(e => new BulkUninstallEntry(e, e.QuietUninstallPossible, UninstallStatus.Waiting))
+            .ToList();
+        IReadOnlyList<BulkUninstallEntry> ordered = args.IntelligentSort
+            ? UninstallSupport.SortIntelligently(taskEntries).ToList()
+            : taskEntries.OrderBy(x => x.UninstallerEntry.DisplayName).ToList();
+
+        // Show the plan (in execution order).
+        plan.WriteLine($"Targets ({entries.Count}):");
+        foreach (var e in ordered.Select(x => x.UninstallerEntry))
         {
             var prot = e.IsProtected ? "  [PROTECTED]" : "";
             var quiet = e.QuietUninstallPossible ? "" : "  (no quiet uninstaller)";
-            Console.WriteLine($"  [{e.UninstallerKind}] {e.DisplayName} {e.DisplayVersion}{quiet}{prot}");
+            plan.WriteLine($"  [{e.UninstallerKind}] {e.DisplayName} {e.DisplayVersion}{quiet}{prot}");
         }
 
         var protectedCount = entries.Count(e => e.IsProtected);
         if (protectedCount > 0 && !args.IgnoreProtected)
-            Console.WriteLine($"\nNote: {protectedCount} protected item(s) will be SKIPPED unless --ignore-protected is given.");
+            plan.WriteLine($"\nNote: {protectedCount} protected item(s) will be SKIPPED unless --ignore-protected is given.");
 
-        Console.WriteLine($"\nMode: prefer-quiet={args.PreferQuiet}  concurrent={args.Concurrent}  " +
-                          $"auto-kill-stuck={args.AutoKillStuck}  retry-failed={args.RetryFailed}  " +
-                          $"loud-limit={!args.NoLoudLimit}");
+        plan.WriteLine($"\nMode: prefer-quiet={args.PreferQuiet}  concurrent={args.Concurrent}  " +
+                       $"auto-kill-stuck={args.AutoKillStuck}  retry-failed={args.RetryFailed}  " +
+                       $"loud-limit={!args.NoLoudLimit}  intelligent-sort={args.IntelligentSort}" +
+                       (args.Simulate ? "  SIMULATE" : ""));
 
         if (!args.WillExecute)
         {
-            Console.WriteLine("\nDRY RUN: re-run with --yes to execute the bulk uninstall.");
+            if (json) WriteJson(ordered, executed: false);
+            plan.WriteLine("\nDRY RUN: re-run with --yes to execute the bulk uninstall.");
             return ExitCodes.Success;
         }
 
-        // Build and run the task.
-        var taskEntries = entries
-            .Select(e => new BulkUninstallEntry(e, e.QuietUninstallPossible, UninstallStatus.Waiting))
-            .ToList();
+        if (!UninstallSupport.Before(entries, args, doNotKillSteam: !args.PreferQuiet))
+            return ExitCodes.Error;
 
-        var config = new BulkUninstallConfiguration(
-            ignoreProtection:   args.IgnoreProtected,
-            preferQuiet:        args.PreferQuiet,
-            simulate:           false,
-            autoKillStuckQuiet: args.AutoKillStuck,
-            retryFailedQuiet:   args.RetryFailed);
-
-        var task = UninstallManager.CreateBulkUninstallTask(taskEntries, config);
-        task.ConcurrentUninstallerCount = Math.Max(1, args.Concurrent);
-        task.OneLoudLimit = !args.NoLoudLimit;
-
-        Console.WriteLine("\nStarting bulk uninstall...\n");
-        task.Start();
-
-        // Poll until finished, streaming progress to stderr.
-        string? lastLine = null;
-        while (!task.Finished)
+        BulkUninstallTask task;
+        try
         {
-            Thread.Sleep(300);
-            if (!args.Quiet)
+            var config = new BulkUninstallConfiguration(
+                ignoreProtection:   args.IgnoreProtected,
+                preferQuiet:        args.PreferQuiet,
+                simulate:           args.Simulate,
+                autoKillStuckQuiet: args.AutoKillStuck,
+                retryFailedQuiet:   args.RetryFailed);
+
+            task = UninstallManager.CreateBulkUninstallTask(ordered, config);
+            task.ConcurrentUninstallerCount = Math.Max(1, args.Concurrent);
+            task.OneLoudLimit = !args.NoLoudLimit;
+
+            plan.WriteLine("\nStarting bulk uninstall...\n");
+            task.Start();
+
+            // Poll until finished, streaming progress to stderr.
+            string? lastLine = null;
+            while (!task.Finished)
             {
-                var done = task.AllUninstallersList.Count(x => x.Finished);
-                var running = task.AllUninstallersList.Count(x => x.IsRunning);
-                var line = $"  progress: {done}/{task.AllUninstallersList.Count} finished, {running} running";
-                if (line != lastLine)
+                Thread.Sleep(300);
+                if (!args.Quiet)
                 {
-                    lastLine = line;
-                    Console.Error.Write($"\r{line,-60}");
+                    var done = task.AllUninstallersList.Count(x => x.Finished);
+                    var running = task.AllUninstallersList.Count(x => x.IsRunning);
+                    var line = $"  progress: {done}/{task.AllUninstallersList.Count} finished, {running} running";
+                    if (line != lastLine)
+                    {
+                        lastLine = line;
+                        Console.Error.Write($"\r{line,-60}");
+                    }
+                }
+            }
+            if (!args.Quiet) Console.Error.WriteLine();
+
+            // Post-uninstall junk pass, over the same set the GUI offers: completed, invalid,
+            // or skipped entries whose registry key is gone.
+            if (args.RunJunk && all != null)
+            {
+                var junkTargets = task.AllUninstallersList
+                    .Where(x => x.CurrentStatus is UninstallStatus.Completed or UninstallStatus.Invalid
+                                || (x.CurrentStatus == UninstallStatus.Skipped && !x.UninstallerEntry.RegKeyStillExists()))
+                    .Select(x => x.UninstallerEntry).ToList();
+                if (junkTargets.Count > 0)
+                {
+                    // Junk output must not break the JSON document on stdout.
+                    var original = Console.Out;
+                    if (json) Console.SetOut(Console.Error);
+                    try { JunkCommands.ScanAndClean(junkTargets, all.Where(a => a.RegKeyStillExists()).ToList(), args); }
+                    finally { if (json) Console.SetOut(original); }
                 }
             }
         }
-        if (!args.Quiet) Console.Error.WriteLine();
-
-        // Summary.
-        Console.WriteLine("\nResults:");
-        int ok = 0, failed = 0, skipped = 0, other = 0;
-        foreach (var t in task.AllUninstallersList.OrderBy(x => x.UninstallerEntry.DisplayName))
+        finally
         {
-            var name = t.UninstallerEntry.DisplayName;
-            switch (t.CurrentStatus)
-            {
-                case UninstallStatus.Completed: ok++;      Console.WriteLine($"  OK       {name}"); break;
-                case UninstallStatus.Failed:    failed++;  Console.WriteLine($"  FAILED   {name}  — {t.CurrentError?.Message}"); break;
-                case UninstallStatus.Skipped:   skipped++; Console.WriteLine($"  SKIPPED  {name}"); break;
-                case UninstallStatus.Protected: skipped++; Console.WriteLine($"  PROTECTED {name}"); break;
-                case UninstallStatus.Invalid:   other++;   Console.WriteLine($"  INVALID  {name}"); break;
-                default:                        other++;   Console.WriteLine($"  {t.CurrentStatus,-8} {name}"); break;
-            }
+            UninstallSupport.After(args);
         }
 
-        Console.WriteLine($"\nDone. Completed: {ok}  Failed: {failed}  Skipped: {skipped}  Other: {other}");
+        // Summary.
+        var results = task.AllUninstallersList.OrderBy(x => x.UninstallerEntry.DisplayName).ToList();
+        int ok = results.Count(t => t.CurrentStatus == UninstallStatus.Completed);
+        int failed = results.Count(t => t.CurrentStatus == UninstallStatus.Failed);
+        int skipped = results.Count(t => t.CurrentStatus is UninstallStatus.Skipped or UninstallStatus.Protected);
+        int other = results.Count - ok - failed - skipped;
+
+        if (json)
+        {
+            WriteJson(results, executed: true);
+        }
+        else
+        {
+            Console.WriteLine("\nResults:");
+            foreach (var t in results)
+            {
+                var name = t.UninstallerEntry.DisplayName;
+                switch (t.CurrentStatus)
+                {
+                    case UninstallStatus.Completed: Console.WriteLine($"  OK       {name}"); break;
+                    case UninstallStatus.Failed:    Console.WriteLine($"  FAILED   {name}  — {t.CurrentError?.Message}"); break;
+                    case UninstallStatus.Skipped:   Console.WriteLine($"  SKIPPED  {name}"); break;
+                    case UninstallStatus.Protected: Console.WriteLine($"  PROTECTED {name}"); break;
+                    case UninstallStatus.Invalid:   Console.WriteLine($"  INVALID  {name}"); break;
+                    default:                        Console.WriteLine($"  {t.CurrentStatus,-8} {name}"); break;
+                }
+            }
+            Console.WriteLine($"\nDone. Completed: {ok}  Failed: {failed}  Skipped: {skipped}  Other: {other}");
+        }
         return failed > 0 ? ExitCodes.PartialFailure : ExitCodes.Success;
+    }
+
+    /// <summary>Machine-readable plan/result for RMM scripts (one JSON document on stdout).</summary>
+    private static void WriteJson(IEnumerable<BulkUninstallEntry> items, bool executed)
+    {
+        var list = items.ToList();
+        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new
+        {
+            executed,
+            total = list.Count,
+            completed = executed ? list.Count(t => t.CurrentStatus == UninstallStatus.Completed) : (int?)null,
+            failed = executed ? list.Count(t => t.CurrentStatus == UninstallStatus.Failed) : (int?)null,
+            items = list.Select(t => new
+            {
+                name = t.UninstallerEntry.DisplayName,
+                version = t.UninstallerEntry.DisplayVersion,
+                kind = t.UninstallerEntry.UninstallerKind.ToString(),
+                registryPath = t.UninstallerEntry.RegistryPath,
+                quiet = t.IsSilentPossible,
+                isProtected = t.UninstallerEntry.IsProtected,
+                status = executed ? t.CurrentStatus.ToString() : null,
+                error = t.CurrentError?.Message
+            })
+        }, new System.Text.Json.JsonSerializerOptions
+        {
+            WriteIndented = true,
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+        }));
     }
 }
