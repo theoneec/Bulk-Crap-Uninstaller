@@ -77,8 +77,8 @@ public static class GuiParityCommands
         {
             var code = entry.UninstallUsingMsi(mode.Value, args.Simulate);
             Console.WriteLine($"msiexec exited with code {code}.");
-            if (args.RunJunk && mode != MsiUninstallModes.InstallModify)
-                JunkCommands.ScanAndClean(new[] { entry }, all, args);
+            if (mode != MsiUninstallModes.InstallModify)
+                JunkCommands.CleanupAfterUninstall(entry, all, args, code);
             return ExitCodes.FromUninstaller(code);
         }
         catch (Exception ex)

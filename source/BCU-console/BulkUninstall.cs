@@ -158,7 +158,9 @@ public static class BulkUninstall
 
             // Post-uninstall junk pass, over the same set the GUI offers: completed, invalid,
             // or skipped entries whose registry key is gone.
-            if (args.RunJunk && all != null)
+            if (args.RunJunk && all != null && args.Simulate)
+                Console.Error.WriteLine("Skipping leftover cleanup: simulated uninstall.");
+            else if (args.RunJunk && all != null)
             {
                 var junkTargets = task.AllUninstallersList
                     .Where(x => x.CurrentStatus is UninstallStatus.Completed or UninstallStatus.Invalid

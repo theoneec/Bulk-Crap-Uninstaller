@@ -190,6 +190,29 @@ replicate the GUI's uninstall wizard and settings:
 | `--simulate` | Settings › *Simulate* (engine-level dry run) |
 | `--no-intelligent-sort` | Turns off *Intelligent uninstaller sorting* (on by default, like the GUI) |
 | `--junk` on `bulk` | Post-uninstall leftover scan of completed entries |
+
+**When `--junk` cleanup runs.** Cleanup is opt-in: add `--junk` to `uninstall`,
+`bulk` or `msi`. It runs in the same command, straight after the uninstall. As in
+the GUI, it only runs for uninstalls that actually completed:
+- **Single `uninstall` / `msi`:** the uninstaller must return 0 or 3010/1641,
+  and the app's registry entry must be gone afterwards.
+- **`bulk`:** only for entries that finished as Completed or Invalid, or that
+  were Skipped and whose registry key is already gone.
+- **`--simulate`:** never deletes leftovers.
+
+When cleanup is skipped, stderr says why, and `bcu junk "<name>"` lets you review
+the leftovers manually.
+
+### Releases
+
+The `.github/workflows/release.yml` workflow builds releases.
+- **To publish:** push a tag such as `v6.3.0-cli.2`, or run *Actions › Release*
+  manually with a tag.
+- **To test-build:** run it manually without a tag.
+
+Each release has `BCU-<tag>-win-x64.zip` (deploy this one with your RMM),
+`-win-arm64.zip`, a multi-arch `-portable.zip` and `SHA256SUMS.txt`. The workflow
+smoke-tests `bcu.exe` on Windows before anything is published.
 | `--format json` | Machine-readable plan/result, one JSON document on stdout (for RMM) |
 
 **New list filters.** They match the GUI's sidebar and View menu: `--preset

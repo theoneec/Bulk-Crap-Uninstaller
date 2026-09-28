@@ -161,7 +161,24 @@ Milestone `cli.1.1` is complete (#10–#15); shipped in `v6.2.0-cli.1.1`.
 - **Engine patch** (`UninstallTools/CustomNotesManager.cs`, §4b notice inline):
   diagnostics go to stderr, not stdout; added `NotesFile`, `GetAllNotes`,
   `TrySetNote`.
+- **Safe post-uninstall cleanup:** `--junk` after a single `uninstall`/`msi` runs
+  only if the uninstaller succeeded (0 or reboot-required) *and* the app's registry
+  entry is gone. `--simulate` never deletes leftovers (uninstall, bulk, msi,
+  uninstall-dir). This matches the GUI, which only offers a leftover scan for
+  completed uninstalls.
 - Not ported: user ratings (web service, GUI-only code), clipboard copy.
+
+### 8. GitHub release pipeline
+- **`.github/workflows/release.yml`:** on a `v*` tag push, or a manual run with a
+  tag, it builds the self-contained portable bundles the way `publish.bat` does
+  (all exe projects per architecture + the native `BCU-launcher`). It then
+  smoke-tests `bcu.exe` on the Windows runner (help, `list --rmm-safe --format
+  json`, dry-run uninstall, exit codes 2/3, the `BCU-console.exe` alias) and
+  publishes a GitHub Release with `BCU-<tag>-win-x64.zip`, `-win-arm64.zip`,
+  `-portable.zip` and `SHA256SUMS.txt`. A manual run without a tag is a test
+  build (zips kept as a run artifact).
+- **`.github/workflows/winget.yml`:** gated to the upstream repository, so fork
+  releases don't try to publish to WinGet as `Klocman.BulkCrapUninstaller`.
 
 ---
 
@@ -171,12 +188,10 @@ Milestone `cli.1.1` is complete (#10–#15); shipped in `v6.2.0-cli.1.1`.
   excluded from `dotnet`/Core MSBuild builds (COM reference, MSB4803). Build with
   Framework MSBuild (`msbuild.exe`, as `publish.bat` does) to include it.
   The other five helpers build under both toolchains.
-- **Reproducible packaging script** — the v6.1.0-cli.1 portable zip was produced
-  with ad-hoc publish commands. A committed `build-release.ps1` (self-contained
-  publish of the .NET projects, stage license/docs/alias/read-me, zip) would make
-  releases repeatable.
-- **Native launcher / multi-arch** — `BCU-launcher` (C++) is skipped (no v143
-  toolset here). To ship the upstream-style multi-arch portable (one
+- ~~Reproducible packaging script~~ — done: `.github/workflows/release.yml` (§8).
+- **Native launcher / multi-arch** — now built by the release workflow on
+  GitHub's windows-2022 runner (it has the v143 toolset). Locally, `BCU-launcher`
+  (C++) was skipped (no v143 toolset). To ship the upstream-style multi-arch portable (one
   `BCUninstaller.exe` launcher + `win-x64`/`win-arm64` subfolders), install the
   VS C++ workload and run the full `publish.bat` flow.
 - **Self-contained _single-file_ `bcu.exe`** is still not wired up. The shipped

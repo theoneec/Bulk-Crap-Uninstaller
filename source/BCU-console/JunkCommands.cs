@@ -23,7 +23,36 @@ public static class JunkCommands
     /// <summary>Scan leftovers for <paramref name="targets"/> and preview/clean them per the safety model.</summary>
     public static int ScanAndClean(IEnumerable<ApplicationUninstallerEntry> targets,
         ICollection<ApplicationUninstallerEntry> all, CliArgs args) =>
-        PresentAndClean(ScanForEntries(targets, all, args), args);
+        // --simulate runs nothing for real, so the app is still installed: never delete its files.
+        PresentAndClean(ScanForEntries(targets, all, args), args, previewOnly: args.Simulate);
+
+    /// <summary>
+    /// The --junk pass after a single uninstall / msi. Mirrors the GUI, which only offers a
+    /// leftover scan for uninstalls that completed: runs only if the uninstaller returned
+    /// success (or reboot-required) and the app's registry entry is gone, so a failed or
+    /// cancelled uninstall can never lead to deleting files of an app that is still installed.
+    /// </summary>
+    public static void CleanupAfterUninstall(ApplicationUninstallerEntry entry,
+        ICollection<ApplicationUninstallerEntry> all, CliArgs args, int uninstallerExitCode)
+    {
+        if (!args.RunJunk) return;
+
+        var mapped = ExitCodes.FromUninstaller(uninstallerExitCode);
+        string? skip =
+            args.Simulate ? "simulated uninstall" :
+            mapped is not (ExitCodes.Success or ExitCodes.RebootRequired) ? $"uninstaller exit code {uninstallerExitCode}" :
+            entry.RegKeyStillExists() ? "the app's registry entry still exists (uninstall didn't complete)" :
+            null;
+
+        if (skip != null)
+        {
+            Console.Error.WriteLine($"Skipping leftover cleanup: {skip}. Run 'bcu junk \"{entry.DisplayName}\"' to review manually.");
+            return;
+        }
+
+        // Scan against apps that are still installed (GUI: only entries whose key still exists).
+        ScanAndClean(new[] { entry }, all.Where(a => !ReferenceEquals(a, entry) && a.RegKeyStillExists()).ToList(), args);
+    }
 
     /// <summary>GUI "Clean up Program Files": orphaned folders not owned by any installed app.</summary>
     public static int RunCleanProgramFiles(CliArgs args)
@@ -94,7 +123,7 @@ public static class JunkCommands
         return junk;
     }
 
-    public static int PresentAndClean(List<IJunkResult> junk, CliArgs args)
+    public static int PresentAndClean(List<IJunkResult> junk, CliArgs args, bool previewOnly = false)
     {
         var machine = args.Format is OutputFormat.Json or OutputFormat.Csv;
 
@@ -105,7 +134,7 @@ public static class JunkCommands
             return ExitCodes.Success;
         }
 
-        if (!args.WillExecute)
+        if (!args.WillExecute || previewOnly)
         {
             // Preview (dry-run). Machine formats emit the full list (for RMM review); text groups by confidence.
             if (machine)

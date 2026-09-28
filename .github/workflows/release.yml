@@ -1,0 +1,195 @@
+# Fork release pipeline (theoneec/Bulk-Crap-Uninstaller).
+#
+# Builds the self-contained portable bundles the same way publish.bat does (every
+# Exe/WinExe project published into one folder per architecture + the native
+# BCU-launcher), smoke-tests bcu.exe on the Windows runner, and publishes a GitHub
+# Release with the zips attached.
+#
+#   * Push a tag like  v6.3.0-cli.2      -> build + test + GitHub Release for that tag
+#   * Run manually (Actions > Release):
+#       - tag empty                      -> build + test only; zips are kept as a run artifact
+#       - tag "v6.3.0-cli.2"             -> build + test + create that tag/release on the chosen branch
+#
+# Assets per release:
+#   BCU-<ver>-win-x64.zip          x64 app folder: bcu.exe (CLI), BCUninstaller.exe (GUI), helpers, runtime
+#                                  -> the one to deploy with an RMM (ConnectWise Automate / Datto RMM)
+#   BCU-<ver>-win-arm64.zip        same for Windows on ARM
+#   BCU-<ver>-portable.zip         upstream-style multi-arch bundle: launcher + win-x64 + win-arm64
+#   SHA256SUMS.txt
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v6.3.0-cli.2). Leave empty for a test build without a release.'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # Only for the fork - upstream has its own release process.
+    if: github.repository != 'BCUninstaller/Bulk-Crap-Uninstaller'
+    runs-on: windows-2022
+    env:
+      CONFIG: Release
+      TFM: net8.0-windows10.0.18362.0
+
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+    - uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2
+
+    - name: Determine version
+      id: ver
+      shell: pwsh
+      run: |
+        $tag = if ('${{ github.event_name }}' -eq 'push') { '${{ github.ref_name }}' } else { '${{ inputs.tag }}'.Trim() }
+        $ver = if ($tag) { $tag } else { "build-$('${{ github.sha }}'.Substring(0,8))" }
+        "tag=$tag" >> $env:GITHUB_OUTPUT
+        "ver=$ver" >> $env:GITHUB_OUTPUT
+        Write-Host "Tag: '$tag'  Version label: $ver"
+
+    - name: Publish win-x64 and win-arm64 (mirrors publish.bat)
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $sol     = Join-Path $PWD 'source'
+        $publish = Join-Path $PWD 'bin\publish'
+        if (Test-Path $publish) { Remove-Item $publish -Recurse -Force }
+
+        # Every executable project, exactly like publish.bat's :publishProjectIfEligible
+        $projects = Get-ChildItem $sol -Recurse -Filter *.csproj |
+                    Where-Object { (Get-Content $_.FullName -Raw) -imatch 'exe</OutputType>' -and $_.Name -notmatch 'Test' }
+        Write-Host "Projects: $($projects.Name -join ', ')"
+
+        foreach ($platform in 'x64', 'ARM64') {
+          $rid    = if ($platform -eq 'ARM64') { 'win-arm64' } else { 'win-x64' }
+          $target = Join-Path $publish $rid
+          Write-Host "====== Building $rid ======"
+
+          # Native launcher (built through the solution so platform mapping is respected)
+          msbuild "$sol\BulkCrapUninstaller.sln" /t:BCU-launcher /m /p:Configuration=$env:CONFIG /p:Platform=$platform "/p:SolutionDir=$sol\\" /verbosity:minimal
+          if ($LASTEXITCODE) { throw "Launcher build failed for $platform" }
+
+          foreach ($p in $projects) {
+            msbuild $p.FullName /restore /m /p:filealignment=512 /t:Publish /p:DeployOnBuild=true `
+              /p:PublishSingleFile=False /p:SelfContained=True /p:PublishProtocol=FileSystem `
+              /p:Configuration=$env:CONFIG /p:Platform=$platform /p:TargetFramework=$env:TFM `
+              "/p:PublishDir=$target\\" /p:RuntimeIdentifier=$rid `
+              /p:PublishReadyToRun=false /p:PublishTrimmed=False /verbosity:minimal
+            if ($LASTEXITCODE) { throw "Publish failed: $($p.Name) ($rid)" }
+          }
+
+          # Back-compat alias for scripts that call BCU-console.exe (apphost still loads bcu.dll)
+          Copy-Item "$target\bcu.exe" "$target\BCU-console.exe" -Force
+        }
+
+    - name: Stage release folders
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $publish = Join-Path $PWD 'bin\publish'
+        Copy-Item 'bin\launcher\BCU-launcher.exe' "$publish\BCUninstaller.exe"
+
+        $docs = 'Licence.txt', 'NOTICE', 'PrivacyPolicy.txt', 'FORK-CHANGES.md'
+        foreach ($rid in 'win-x64', 'win-arm64') {
+          foreach ($d in $docs) { Copy-Item $d "$publish\$rid\" -Force }
+          Copy-Item 'source\BCU-console\README.md' "$publish\$rid\CLI-README.md" -Force
+        }
+        foreach ($d in $docs) { Copy-Item $d "$publish\" -Force }
+        Copy-Item 'source\BCU-console\README.md' "$publish\CLI-README.md" -Force
+        if (Test-Path "$publish\win-x64\BCU_manual.html") { Copy-Item "$publish\win-x64\BCU_manual.html" "$publish\" }
+
+        Get-ChildItem $publish -Recurse -Filter *.pdb | Remove-Item -Force
+
+    - name: Smoke-test bcu.exe (x64)
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $bcu = Join-Path $PWD 'bin\publish\win-x64\bcu.exe'
+
+        & $bcu help | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "bcu help exited $LASTEXITCODE" }
+
+        # Registry-only inventory, as an RMM would run it; stdout must be valid JSON
+        $json = & $bcu list --rmm-safe --format json --quiet
+        if ($LASTEXITCODE -ne 0) { throw "bcu list exited $LASTEXITCODE" }
+        $apps = ($json -join "`n") | ConvertFrom-Json
+        Write-Host "bcu list returned $($apps.Count) app(s)"
+        if ($apps.Count -lt 1) { throw 'bcu list returned no applications' }
+
+        # Dry-run paths must not change anything and must exit 0
+        $probe = $apps | Where-Object registryPath | Select-Object -First 1
+        & $bcu uninstall --registry-path $probe.registryPath --rmm-safe --quiet --format json | ConvertFrom-Json | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "bcu uninstall (dry run) exited $LASTEXITCODE" }
+        & $bcu startup list --format json --quiet | ConvertFrom-Json | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "bcu startup list exited $LASTEXITCODE" }
+
+        # Bad usage and unknown targets return the documented codes
+        & $bcu info "no-such-app-$([guid]::NewGuid())" --rmm-safe --quiet 2>$null
+        if ($LASTEXITCODE -ne 3) { throw "expected NotFound (3) for a missing target, got $LASTEXITCODE" }
+        & $bcu notes set 2>$null
+        if ($LASTEXITCODE -ne 2) { throw "expected BadUsage (2), got $LASTEXITCODE" }
+
+        & "$(Split-Path $bcu)\BCU-console.exe" help | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "BCU-console.exe alias failed ($LASTEXITCODE)" }
+        Write-Host 'Smoke test passed.'
+
+    - name: Create zips
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $ver = '${{ steps.ver.outputs.ver }}'
+        $publish = Join-Path $PWD 'bin\publish'
+        $dist = Join-Path $PWD 'dist'
+        New-Item $dist -ItemType Directory -Force | Out-Null
+
+        Compress-Archive -Path "$publish\win-x64\*"   -DestinationPath "$dist\BCU-$ver-win-x64.zip"
+        Compress-Archive -Path "$publish\win-arm64\*" -DestinationPath "$dist\BCU-$ver-win-arm64.zip"
+        Compress-Archive -Path "$publish\*"           -DestinationPath "$dist\BCU-$ver-portable.zip"
+
+        Get-ChildItem $dist -Filter *.zip | ForEach-Object {
+          "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
+        } | Set-Content "$dist\SHA256SUMS.txt" -Encoding ascii
+        Get-Content "$dist\SHA256SUMS.txt"
+
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: BCU-${{ steps.ver.outputs.ver }}
+        path: dist\*
+
+    - name: Publish GitHub Release
+      if: steps.ver.outputs.tag != ''
+      shell: pwsh
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $tag = '${{ steps.ver.outputs.tag }}'
+        $notes = @"
+        Portable, self-contained build of the theoneec fork of Bulk Crap Uninstaller (no installer, no .NET runtime needed).
+
+        * **BCU-$tag-win-x64.zip** - unzip and run ``bcu.exe`` (CLI) or ``BCUninstaller.exe`` (GUI). Use this one for RMM deployment.
+        * **BCU-$tag-win-arm64.zip** - the same for Windows on ARM.
+        * **BCU-$tag-portable.zip** - multi-arch bundle with the upstream launcher.
+
+        CLI reference: ``CLI-README.md`` inside the zip. Fork changes: ``FORK-CHANGES.md``.
+        "@
+        $existing = gh release view $tag 2>$null
+        if ($LASTEXITCODE -eq 0) {
+          gh release upload $tag (Get-ChildItem dist\*).FullName --clobber
+        } else {
+          gh release create $tag (Get-ChildItem dist\*).FullName --title "BCU $tag" --notes $notes --generate-notes --target '${{ github.sha }}'
+        }
+        if ($LASTEXITCODE) { throw 'gh release failed' }

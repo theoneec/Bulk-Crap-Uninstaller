@@ -243,8 +243,7 @@ static int RunUninstall(CliArgs args)
         var code = proc?.ExitCode ?? 0;
         Console.WriteLine(code == 0 ? "Uninstall completed." : $"Uninstaller exited with code {code}.");
 
-        if (args.RunJunk)
-            JunkCommands.ScanAndClean(new[] { entry }, all, args);
+        JunkCommands.CleanupAfterUninstall(entry, all, args, code);
         return ExitCodes.FromUninstaller(code);
     }
     catch (Exception ex)

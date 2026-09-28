@@ -8,6 +8,8 @@ permissions:
 
 jobs:
   publish:
+    # Fork change (theoneec): only upstream publishes to WinGet; fork releases must not.
+    if: github.repository == 'BCUninstaller/Bulk-Crap-Uninstaller'
     runs-on: ubuntu-latest
     steps:
       - name: Get version
